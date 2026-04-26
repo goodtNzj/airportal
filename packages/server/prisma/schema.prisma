@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  username     String     @unique
+  passwordHash String     @map("password_hash")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  transfers    Transfer[]
+
+  @@map("users")
+}
+
+model Transfer {
+  id            Int      @id @default(autoincrement())
+  pickupCode    String   @unique @map("pickup_code")
+  contentType   String   @map("content_type")
+
+  // 文本内容
+  textContent   String?  @map("text_content")
+
+  // 文件信息
+  fileName      String?  @map("file_name")
+  fileSize      Int?     @map("file_size")
+  filePath      String?  @map("file_path")
+  fileMimeType  String?  @map("file_mime_type")
+
+  // 用户关联
+  userId        Int?     @map("user_id")
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 元数据
+  downloadCount Int      @default(0) @map("download_count")
+  maxDownloads  Int      @default(1) @map("max_downloads")
+
+  // 时间
+  createdAt     DateTime @default(now()) @map("created_at")
+  expiresAt     DateTime @map("expires_at")
+
+  // 状态: active, expired, deleted
+  status        String   @default("active")
+
+  @@index([pickupCode])
+  @@index([expiresAt])
+  @@index([status])
+  @@index([userId])
+  @@map("transfers")
+}

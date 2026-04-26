@@ -1,0 +1,54 @@
+{
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0"
+  },
+  "security": {
+    "fileValidation": {
+      "enabled": true,
+      "description": "文件类型深度检测（Magic Number 验证）- 检测文件真实类型，防止伪装扩展名攻击"
+    },
+    "ipBlacklist": {
+      "enabled": true,
+      "autoBlockThreshold": 10,
+      "autoBlockWindow": 60,
+      "autoBlockDuration": 3600,
+      "whitelist": ["127.0.0.1", "::1"],
+      "blacklist": [],
+      "description": "IP 黑名单与自动封禁 - 自动封禁频繁失败的请求 IP"
+    },
+    "auditLog": {
+      "enabled": true,
+      "description": "请求审计日志 - 记录所有请求的详细信息，用于安全审计"
+    },
+    "rateLimit": {
+      "globalMax": 100,
+      "globalWindowMs": 60000,
+      "uploadMax": 10,
+      "uploadWindowMs": 60000,
+      "description": "请求限流配置 - 防止 DDoS 和滥用"
+    },
+    "upload": {
+      "maxFileSize": 52428800,
+      "maxTextLength": 10000,
+      "blockedExtensions": [".exe", ".bat", ".cmd", ".sh", ".ps1", ".vbs", ".msi"],
+      "description": "上传限制配置"
+    }
+  },
+  "transfer": {
+    "codeLength": 6,
+    "defaultExpiry": 180,
+    "maxExpiry": 3600
+  },
+  "cleanup": {
+    "interval": 60,
+    "runOnStart": true,
+    "cleanFiles": true,
+    "cleanRecords": true,
+    "recordAction": "update"
+  },
+  "log": {
+    "level": "info",
+    "file": ""
+  }
+}
