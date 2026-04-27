@@ -125,14 +125,29 @@ export function auditMiddleware(request: FastifyRequest, reply: FastifyReply, do
  * IP 黑名单管理路由
  */
 export async function ipBlacklistRoutes(app: FastifyInstance) {
-  app.get('/stats', async (request, reply) => {
+  // IP 管理端点限流：5 req/min
+  app.get('/stats', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: 60000,
+      },
+    },
+  }, async (request, reply) => {
     return reply.send({
       success: true,
       data: ipBlacklistService.getStats(),
     });
   });
 
-  app.get('/blocked', async (request, reply) => {
+  app.get('/blocked', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: 60000,
+      },
+    },
+  }, async (request, reply) => {
     return reply.send({
       success: true,
       data: ipBlacklistService.getBlockedIPs(),

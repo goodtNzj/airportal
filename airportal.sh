@@ -6,6 +6,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PID_FILE="$SCRIPT_DIR/.airportal.pid"
 LOG_DIR="$SCRIPT_DIR/logs"
+PORT=3000
 
 # 颜色输出
 RED='\033[0;31m'
@@ -68,12 +69,8 @@ start() {
     fi
 
     # 检查端口
-    if check_port 3000; then
-        log_error "端口 3000 已被占用"
-        exit 1
-    fi
-    if check_port 5173; then
-        log_error "端口 5173 已被占用"
+    if check_port $PORT; then
+        log_error "端口 $PORT 已被占用"
         exit 1
     fi
 
@@ -82,38 +79,28 @@ start() {
 
     log_info "正在启动服务..."
 
-    # 启动后端
+    # 单进程启动（前端+后端同一端口）
     cd "$SCRIPT_DIR/packages/server"
-    pnpm dev > "$LOG_DIR/server.log" 2>&1 &
-    BACKEND_PID=$!
+    pnpm dev > "$LOG_DIR/airportal.log" 2>&1 &
+    SERVER_PID=$!
 
-    # 等待后端启动
-    sleep 3
-
-    # 启动前端
-    cd "$SCRIPT_DIR/packages/web"
-    pnpm dev > "$LOG_DIR/web.log" 2>&1 &
-    FRONTEND_PID=$!
-
-    # 保存主进程 PID（使用后端 PID 作为主 PID）
-    echo "$BACKEND_PID" > "$PID_FILE"
+    # 保存 PID
+    echo "$SERVER_PID" > "$PID_FILE"
 
     # 等待服务启动
-    sleep 5
-
-    if wait_for_port 3000 && wait_for_port 5173; then
+    if wait_for_port $PORT; then
         log_info "服务启动成功!"
         echo ""
         echo "======================================"
-        echo "  前端: http://localhost:5173"
-        echo "  后端: http://localhost:3000/api"
+        echo "  AirPortal: http://localhost:$PORT"
+        echo "  API:       http://localhost:$PORT/api"
         echo "======================================"
         echo ""
-        echo "日志目录: $LOG_DIR"
+        echo "日志文件: $LOG_DIR/airportal.log"
         echo "PID 文件: $PID_FILE"
     else
         log_error "服务启动失败，请检查日志"
-        cat "$LOG_DIR/server.log"
+        cat "$LOG_DIR/airportal.log"
         exit 1
     fi
 }
@@ -122,18 +109,23 @@ start() {
 stop() {
     if ! is_running; then
         log_warn "服务未运行"
-        # 清理可能残留的进程
-        lsof -ti:3000 | xargs kill -9 2>/dev/null
-        lsof -ti:5173 | xargs kill -9 2>/dev/null
+        lsof -ti:$PORT | xargs kill -9 2>/dev/null
         [ -f "$PID_FILE" ] && rm -f "$PID_FILE"
         exit 0
     fi
 
     log_info "正在停止服务..."
 
-    # 停止所有相关进程
-    lsof -ti:3000 | xargs kill -9 2>/dev/null
-    lsof -ti:5173 | xargs kill -9 2>/dev/null
+    # 停止主进程
+    local pid=$(cat "$PID_FILE" 2>/dev/null)
+    if [ -n "$pid" ]; then
+        kill "$pid" 2>/dev/null
+        sleep 1
+        kill -9 "$pid" 2>/dev/null
+    fi
+
+    # 清理端口
+    lsof -ti:$PORT | xargs kill -9 2>/dev/null
 
     # 清理 PID 文件
     rm -f "$PID_FILE"
@@ -165,18 +157,11 @@ status() {
 
     echo ""
 
-    # 检查后端
-    if check_port 3000; then
-        echo -e "后端 (3000): ${GREEN}运行中${NC}"
+    if check_port $PORT; then
+        echo -e "端口 ($PORT): ${GREEN}运行中${NC}"
+        echo "访问地址: http://localhost:$PORT"
     else
-        echo -e "后端 (3000): ${RED}未运行${NC}"
-    fi
-
-    # 检查前端
-    if check_port 5173; then
-        echo -e "前端 (5173): ${GREEN}运行中${NC}"
-    else
-        echo -e "前端 (5173): ${RED}未运行${NC}"
+        echo -e "端口 ($PORT): ${RED}未运行${NC}"
     fi
 
     echo "======================================"
@@ -185,19 +170,11 @@ status() {
 
 # 查看日志
 logs() {
-    local service=$1
-    case $service in
-        server|backend)
-            tail -f "$LOG_DIR/server.log"
-            ;;
-        web|frontend)
-            tail -f "$LOG_DIR/web.log"
-            ;;
-        *)
-            echo "用法: $0 logs {server|web}"
-            exit 1
-            ;;
-    esac
+    if [ -f "$LOG_DIR/airportal.log" ]; then
+        tail -f "$LOG_DIR/airportal.log"
+    else
+        echo "日志文件不存在"
+    fi
 }
 
 # 主入口
@@ -215,7 +192,7 @@ case "$1" in
         status
         ;;
     logs)
-        logs "$2"
+        logs
         ;;
     *)
         echo "AirPortal 服务管理脚本"
@@ -227,7 +204,7 @@ case "$1" in
         echo "  stop     停止服务"
         echo "  restart  重启服务"
         echo "  status   查看状态"
-        echo "  logs     查看日志 (server|web)"
+        echo "  logs     查看日志"
         exit 1
         ;;
 esac

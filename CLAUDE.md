@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AirPortal is a secure file/text transfer application. Users can upload files or text to generate a pickup code, and others can retrieve content using that code. Built with TypeScript monorepo using pnpm workspaces.
+AirPortal is a secure file/text/folder transfer application. Users can upload files, folders, or text to generate a pickup code, and others can retrieve content using that code. Built with TypeScript monorepo using pnpm workspaces.
+
+**Single-process architecture**: In both dev and production, a single Node.js process (Fastify on port 3000) serves both the API and the frontend. In dev, Vite is integrated as middleware for HMR.
 
 ## Commands
 
 ```bash
-# Development
-pnpm dev              # Start both frontend and backend
-pnpm dev:server       # Start backend only (port 3000)
-pnpm dev:web          # Start frontend only (port 5173)
+# Development (single process)
+pnpm dev              # Start server (port 3000) - serves API + frontend with HMR
 
 # Database
 pnpm db:generate      # Generate Prisma client
@@ -24,24 +24,30 @@ pnpm test:server      # Run backend tests only
 pnpm test:web         # Run frontend tests only
 
 # Production
-pnpm build            # Build all packages
-pnpm start            # Start production server
+pnpm build            # Build frontend then backend
+pnpm start            # Start production server (single process, port 3000)
 ```
 
 ## Architecture
 
+### Single Process (Port 3000)
+- **Dev**: Fastify with Vite middleware (HMR via same HTTP server)
+- **Prod**: Fastify serves built frontend via `@fastify/static`
+
 ### Backend (`packages/server`)
 - **Fastify v5** with Prisma ORM + SQLite
 - Entry: `src/index.ts` → `src/app.ts`
+- Vite integration: `src/vite-dev.ts`
 - Routes: `src/routes/` (auth, transfers, security/ip)
 - Services: `src/services/` - business logic layer
 - Database schema: `prisma/schema.prisma`
 
 **Core Services:**
-- `transferService` - File/text upload and retrieval
+- `transferService` - File/text/folder upload and retrieval
 - `authService` - JWT authentication
 - `cleanupService` - Cron job for expired transfer cleanup
 - `fileValidationService` - Magic number file type detection
+- `zipValidationService` - ZIP archive security validation (path traversal, zip bomb detection)
 - `ipBlacklistService` - IP blocking with auto-ban
 
 ### Frontend (`packages/web`)
@@ -50,10 +56,11 @@ pnpm start            # Start production server
 - Pages: HomePage, SendPage, ReceivePage, LoginPage
 - State: Zustand with persist middleware (`src/stores/useStore.ts`)
 - API client: `src/services/api.ts` (Axios)
+- Folder ZIP utility: `src/services/folder-zip.ts`
 
 ### Configuration
 Priority: Environment variables > `config.json` > defaults
-- `config.json` - Runtime config (security, rate limits, expiry)
+- `config.json` - Runtime config (security, rate limits, expiry, folder upload)
 - `.env` - Environment overrides
 
 ## Data Storage
@@ -65,7 +72,7 @@ Priority: Environment variables > `config.json` > defaults
 
 ## API Endpoints
 
-- `POST /api/transfers` - Upload file or text (`multipart/form-data` or JSON)
+- `POST /api/transfers` - Upload file, folder, or text (`multipart/form-data` or JSON)
 - `GET /api/transfers/:code` - Retrieve by pickup code
 - `GET /api/transfers/config` - Get client config
 - `POST /api/auth/register|login` - Authentication
@@ -79,10 +86,13 @@ Priority: Environment variables > `config.json` > defaults
 
 All configurable via `config.json`:
 - File type validation (magic number detection)
+- ZIP archive validation (path traversal, zip bomb detection, entry limits)
 - IP blacklist with automatic blocking
-- Rate limiting (global and upload-specific)
+- Rate limiting (global, upload-specific, IP management endpoints)
 - Audit logging
 - Helmet.js security headers
+- Path traversal prevention on file writes
+- Disk quota enforcement
 
 ## Testing
 

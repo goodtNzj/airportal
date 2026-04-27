@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { CodeService } from './code.service.js';
 import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
-import type { TransferResult } from '../types/index.js';
+import type { TransferResult, FolderMetadata } from '../types/index.js';
 
 const prisma = new PrismaClient();
 
@@ -73,7 +73,8 @@ export class TransferService {
       data: Buffer;
     },
     expiresIn: number,
-    userId?: number
+    userId?: number,
+    folderMetadata?: FolderMetadata
   ): Promise<TransferResult> {
     const config = getConfig();
 
@@ -82,15 +83,27 @@ export class TransferService {
       throw new Error(`文件大小超过限制（最大 ${config.security.upload.maxFileSize / 1024 / 1024}MB）`);
     }
 
-    // 检查文件扩展名
-    const ext = path.extname(file.filename).toLowerCase();
-    if (config.security.upload.blockedExtensions.includes(ext)) {
-      throw new Error('不支持的文件类型');
+    // 磁盘配额检查
+    await this.checkDiskQuota(file.data.length);
+
+    // 检查文件扩展名（非文件夹上传）
+    if (!folderMetadata) {
+      const ext = path.extname(file.filename).toLowerCase();
+      if (config.security.upload.blockedExtensions.includes(ext)) {
+        throw new Error('不支持的文件类型');
+      }
     }
 
     const pickupCode = await this.generateUniqueCode();
     const safeFileName = this.generateSafeFileName(file.filename);
     const filePath = path.join(this.uploadDir!, `${pickupCode}_${safeFileName}`);
+
+    // 路径遍历最终检查
+    const resolvedPath = path.resolve(filePath);
+    if (!resolvedPath.startsWith(path.resolve(this.uploadDir!))) {
+      logger.error('Path traversal attempt blocked', { requested: filePath, resolved: resolvedPath });
+      throw new Error('文件路径验证失败');
+    }
 
     // 保存文件
     await fs.writeFile(filePath, file.data);
@@ -99,28 +112,71 @@ export class TransferService {
     const actualExpiry = Math.min(expiresIn, config.transfer.maxExpiry);
     const expiresAt = new Date(Date.now() + actualExpiry * 1000);
 
+    const isFolder = !!folderMetadata;
+
     await prisma.transfer.create({
       data: {
         pickupCode,
-        contentType: 'file',
-        fileName: file.filename,
+        contentType: isFolder ? 'folder' : 'file',
+        fileName: isFolder ? folderMetadata.folderName : file.filename,
         fileSize: file.data.length,
         filePath,
         fileMimeType: file.mimetype,
+        fileCount: folderMetadata?.fileCount ?? null,
+        folderName: folderMetadata?.folderName ?? null,
         expiresAt,
         userId: userId || null,
       },
     });
 
-    logger.info('File transfer created', {
+    logger.info(`${isFolder ? 'Folder' : 'File'} transfer created`, {
       pickupCode,
       fileName: file.filename,
       fileSize: file.data.length,
+      fileCount: folderMetadata?.fileCount,
       expiresIn: actualExpiry,
       userId: userId || 'anonymous',
     });
 
-    return { pickupCode, expiresAt, expiresIn: actualExpiry };
+    return {
+      pickupCode,
+      expiresAt,
+      expiresIn: actualExpiry,
+      fileCount: folderMetadata?.fileCount,
+      folderName: folderMetadata?.folderName,
+    };
+  }
+
+  /**
+   * Check total storage quota before accepting a new upload.
+   */
+  private async checkDiskQuota(newFileSize: number): Promise<void> {
+    const config = getConfig();
+    const maxTotalStorage = config.security.upload.maxTotalStorage;
+    if (!maxTotalStorage) return;
+
+    try {
+      const result = await prisma.transfer.aggregate({
+        _sum: { fileSize: true },
+        where: {
+          status: 'active',
+          contentType: { in: ['file', 'folder'] },
+        },
+      });
+
+      const currentTotal = result._sum.fileSize || 0;
+      if (currentTotal + newFileSize > maxTotalStorage) {
+        const usedMB = (currentTotal / 1024 / 1024).toFixed(0);
+        const limitMB = (maxTotalStorage / 1024 / 1024).toFixed(0);
+        throw new Error(`存储空间不足（已用 ${usedMB}MB / ${limitMB}MB），请稍后重试`);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('存储空间不足')) {
+        throw error;
+      }
+      // Aggregate query failed (e.g., first run) - skip quota check
+      logger.debug('Disk quota check skipped', { error });
+    }
   }
 
   async getTransfer(pickupCode: string) {
@@ -215,14 +271,32 @@ export class TransferService {
   }
 
   private generateSafeFileName(originalName: string): string {
+    // Strip to basename only (removes directory traversal)
     let safeName = path.basename(originalName);
-    safeName = safeName.replace(/[\x00-\x1f\x80-\x9f]/g, '');
+
+    // Remove null bytes and control characters
+    safeName = safeName.replace(/[\x00-\x1f\x7f\x80-\x9f]/g, '');
+
+    // Replace path separators with underscore
+    safeName = safeName.replace(/[/\\]/g, '_');
+
+    // Remove leading dots (hidden files on Unix)
+    safeName = safeName.replace(/^\.+/, '');
+
+    // Truncate to max length, preserving extension
     const maxLen = 200;
     if (safeName.length > maxLen) {
       const ext = path.extname(safeName);
       const base = safeName.slice(0, maxLen - ext.length);
       safeName = base + ext;
     }
+
+    // If empty after sanitization, use a default name
+    if (!safeName) {
+      safeName = 'unnamed_file';
+    }
+
+    // Prefix with random bytes to prevent collisions
     const randomPrefix = crypto.randomBytes(4).toString('hex');
     return `${randomPrefix}_${safeName}`;
   }

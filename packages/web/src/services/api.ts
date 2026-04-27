@@ -71,6 +71,27 @@ export const transferApi = {
     return res.data.data;
   },
 
+  uploadFolder: async (zipBlob: Blob, folderName: string, fileCount: number, expiresIn?: number): Promise<TransferResult> => {
+    const formData = new FormData();
+    formData.append('file', zipBlob, `${folderName}.zip`);
+    if (expiresIn) {
+      formData.append('expiresIn', expiresIn.toString());
+    }
+    const params = new URLSearchParams();
+    params.append('type', 'folder');
+    params.append('folderName', folderName);
+    params.append('fileCount', fileCount.toString());
+    if (expiresIn) {
+      params.append('expiresIn', expiresIn.toString());
+    }
+    const res = await api.post<{ success: boolean; data: TransferResult }>(
+      `/transfers?${params.toString()}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return res.data.data;
+  },
+
   uploadText: async (text: string, expiresIn?: number): Promise<TransferResult> => {
     const res = await api.post<{ success: boolean; data: TransferResult }>('/transfers', {
       text,

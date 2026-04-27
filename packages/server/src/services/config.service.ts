@@ -1,8 +1,15 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 let loadedConfig: AppConfig | null = null;
+
+export interface FolderUploadConfig {
+  enabled: boolean;
+  maxUncompressedSize: number;
+  maxCompressionRatio: number;
+  maxEntries: number;
+  maxFileNameLength: number;
+}
 
 export interface SecurityConfig {
   fileValidation: {
@@ -28,7 +35,9 @@ export interface SecurityConfig {
   upload: {
     maxFileSize: number;
     maxTextLength: number;
+    maxTotalStorage: number;
     blockedExtensions: string[];
+    folderUpload: FolderUploadConfig;
   };
 }
 
@@ -153,7 +162,15 @@ export async function initConfig(): Promise<AppConfig> {
       upload: {
         maxFileSize: getValue('MAX_FILE_SIZE', configFile?.security?.upload?.maxFileSize, 52428800, Number),
         maxTextLength: getValue('MAX_TEXT_LENGTH', configFile?.security?.upload?.maxTextLength, 10000, Number),
+        maxTotalStorage: getValue('MAX_TOTAL_STORAGE', configFile?.security?.upload?.maxTotalStorage, 1073741824, Number),
         blockedExtensions: configFile?.security?.upload?.blockedExtensions ?? ['.exe', '.bat', '.cmd', '.sh', '.ps1', '.vbs', '.msi'],
+        folderUpload: {
+          enabled: getValue('FOLDER_UPLOAD_ENABLED', (configFile?.security?.upload as any)?.folderUpload?.enabled, true, (v) => v !== 'false'),
+          maxUncompressedSize: getValue('ZIP_MAX_UNCOMPRESSED_SIZE', (configFile?.security?.upload as any)?.folderUpload?.maxUncompressedSize, 524288000, Number),
+          maxCompressionRatio: getValue('ZIP_MAX_COMPRESSION_RATIO', (configFile?.security?.upload as any)?.folderUpload?.maxCompressionRatio, 100, Number),
+          maxEntries: getValue('ZIP_MAX_ENTRIES', (configFile?.security?.upload as any)?.folderUpload?.maxEntries, 10000, Number),
+          maxFileNameLength: getValue('ZIP_MAX_FILENAME_LENGTH', (configFile?.security?.upload as any)?.folderUpload?.maxFileNameLength, 512, Number),
+        },
       },
     },
 
@@ -177,11 +194,70 @@ export async function initConfig(): Promise<AppConfig> {
     },
 
     cors: {
-      origins: process.env.ALLOWED_ORIGINS?.split(',') ?? configFile?.cors?.origins ?? ['http://localhost:5173'],
+      origins: process.env.ALLOWED_ORIGINS?.split(',') ?? configFile?.cors?.origins ?? ['http://localhost:3000'],
     },
   };
 
   return loadedConfig;
+}
+
+/**
+ * 验证配置有效性
+ */
+export function validateConfig(config: AppConfig): string[] {
+  const errors: string[] = [];
+
+  if (!config.server.port || config.server.port < 1 || config.server.port > 65535) {
+    errors.push('server.port 必须是 1-65535 之间的端口号');
+  }
+  if (!config.server.host) {
+    errors.push('server.host 不能为空');
+  }
+  if (!config.jwt.secret || config.jwt.secret === 'dev-secret-change-in-production') {
+    if (process.env.NODE_ENV === 'production') {
+      errors.push('生产环境必须修改 JWT_SECRET');
+    }
+  }
+  if (!config.jwt.expiresIn) {
+    errors.push('jwt.expiresIn 不能为空');
+  }
+  if (config.security.rateLimit.globalMax < 1) {
+    errors.push('security.rateLimit.globalMax 必须大于 0');
+  }
+  if (config.security.rateLimit.uploadMax < 1) {
+    errors.push('security.rateLimit.uploadMax 必须大于 0');
+  }
+  if (config.security.upload.maxFileSize < 1) {
+    errors.push('security.upload.maxFileSize 必须大于 0');
+  }
+  if (config.security.upload.maxTextLength < 1) {
+    errors.push('security.upload.maxTextLength 必须大于 0');
+  }
+  if (config.security.upload.maxTotalStorage < config.security.upload.maxFileSize) {
+    errors.push('security.upload.maxTotalStorage 不能小于 maxFileSize');
+  }
+  if (config.transfer.defaultExpiry < 1) {
+    errors.push('transfer.defaultExpiry 必须大于 0');
+  }
+  if (config.transfer.maxExpiry < config.transfer.defaultExpiry) {
+    errors.push('transfer.maxExpiry 不能小于 defaultExpiry');
+  }
+  if (config.cleanup.interval < 0) {
+    errors.push('cleanup.interval 不能为负数');
+  }
+  if (!['update', 'delete'].includes(config.cleanup.recordAction)) {
+    errors.push('cleanup.recordAction 必须为 update 或 delete');
+  }
+  if (config.security.upload.folderUpload) {
+    if (config.security.upload.folderUpload.maxCompressionRatio < 1) {
+      errors.push('security.upload.folderUpload.maxCompressionRatio 必须大于 0');
+    }
+    if (config.security.upload.folderUpload.maxEntries < 1) {
+      errors.push('security.upload.folderUpload.maxEntries 必须大于 0');
+    }
+  }
+
+  return errors;
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { transferService } from '../services/transfer.service.js';
 import { fileValidationService } from '../services/file-type.service.js';
+import { zipValidationService } from '../services/zip-validation.service.js';
 import { authMiddleware, optionalAuthMiddleware } from '../middlewares/auth.middleware.js';
 import { getConfig } from '../config/index.js';
 import { logger } from '../services/logger.service.js';
@@ -23,12 +24,16 @@ export async function transferRoutes(app: FastifyInstance) {
         maxTextLength: config.security.upload.maxTextLength,
         defaultExpiry: config.transfer.defaultExpiry,
         maxExpiry: config.transfer.maxExpiry,
+        folderUploadEnabled: config.security.upload.folderUpload.enabled,
       },
     });
   });
 
   // 创建传输
-  app.post<{ Body: { text?: string; expiresIn?: number } }>(
+  app.post<{
+    Body: { text?: string; expiresIn?: number };
+    Querystring: { type?: string; folderName?: string; fileCount?: string; expiresIn?: string };
+  }>(
     '/',
     {
       preHandler: optionalAuthMiddleware,
@@ -45,7 +50,7 @@ export async function transferRoutes(app: FastifyInstance) {
       const userId = request.user?.userId;
 
       try {
-        // 文件上传
+        // 文件/文件夹上传
         if (contentType.includes('multipart/form-data')) {
           const data = await request.file();
           if (!data) {
@@ -56,13 +61,51 @@ export async function transferRoutes(app: FastifyInstance) {
           }
 
           const buffer = await data.toBuffer();
+
+          // Parse query parameters
+          const isFolderUpload = request.query.type === 'folder';
+          const folderName = request.query.folderName || 'folder';
+          const fileCount = parseInt(request.query.fileCount || '0') || 0;
           const expiresIn = Math.min(
-            parseInt(request.query.expiresIn as string) || config.transfer.defaultExpiry,
+            parseInt(request.query.expiresIn || '') || config.transfer.defaultExpiry,
             config.transfer.maxExpiry
           );
 
-          // 文件类型深度检测
-          if (config.security.fileValidation.enabled) {
+          // 文件夹上传 ZIP 安全验证
+          if (isFolderUpload && config.security.upload.folderUpload.enabled) {
+            const zipValidation = zipValidationService.validateZipArchive(buffer, {
+              maxUncompressedSize: config.security.upload.folderUpload.maxUncompressedSize,
+              maxCompressionRatio: config.security.upload.folderUpload.maxCompressionRatio,
+              maxEntries: config.security.upload.folderUpload.maxEntries,
+              maxFileNameLength: config.security.upload.folderUpload.maxFileNameLength,
+            });
+
+            if (!zipValidation.valid) {
+              logger.warn('ZIP validation failed', {
+                filename: data.filename,
+                reason: zipValidation.reason,
+                ip: request.ip,
+                userId: userId || 'anonymous',
+              });
+
+              return reply.status(400).send({
+                success: false,
+                error: {
+                  code: 'INVALID_ZIP',
+                  message: zipValidation.reason || 'ZIP 文件验证失败',
+                },
+              });
+            }
+
+            logger.debug('ZIP validation passed', {
+              filename: data.filename,
+              entryCount: zipValidation.entryCount,
+              estimatedSize: zipValidation.estimatedUncompressedSize,
+            });
+          }
+
+          // 文件类型深度检测（非文件夹上传）
+          if (!isFolderUpload && config.security.fileValidation.enabled) {
             const validation = fileValidationService.validateFile(
               buffer,
               data.mimetype,
@@ -94,6 +137,10 @@ export async function transferRoutes(app: FastifyInstance) {
             });
           }
 
+          const folderMetadata = isFolderUpload
+            ? { fileCount, folderName, estimatedUncompressedSize: 0 }
+            : undefined;
+
           const result = await transferService.createFileTransfer(
             {
               filename: data.filename,
@@ -101,7 +148,8 @@ export async function transferRoutes(app: FastifyInstance) {
               data: buffer,
             },
             expiresIn,
-            userId
+            userId,
+            folderMetadata
           );
 
           return reply.send({ success: true, data: result });
@@ -158,21 +206,26 @@ export async function transferRoutes(app: FastifyInstance) {
         });
       }
 
-      // 文件下载
-      const fileBuffer = await import('fs/promises').then((fs) =>
-        fs.readFile(transfer.filePath!)
-      );
+      // 文件/文件夹下载
+      const fsModule = await import('fs/promises');
+      const fileBuffer = await fsModule.readFile(transfer.filePath!);
 
       await transferService.incrementDownloadCount(transfer.id);
+
+      const downloadName = transfer.contentType === 'folder'
+        ? `${transfer.folderName || transfer.fileName || 'folder'}.zip`
+        : transfer.fileName!;
 
       return reply
         .header('Content-Type', transfer.fileMimeType || 'application/octet-stream')
         .header(
           'Content-Disposition',
-          `attachment; filename*=UTF-8''${encodeURIComponent(transfer.fileName!)}`
+          `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`
         )
         .header('X-Content-Type-Options', 'nosniff')
         .header('X-Download-Options', 'noopen')
+        .header('Cache-Control', 'no-store, no-cache, must-revalidate')
+        .header('Content-Security-Policy', "default-src 'none'")
         .send(fileBuffer);
     } catch (error) {
       const message = error instanceof Error ? error.message : '获取失败';

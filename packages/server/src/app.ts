@@ -3,11 +3,18 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { initConfig, getConfig } from './config/index.js';
 import { routes } from './routes/index.js';
 import { transferService } from './services/transfer.service.js';
 import { cleanupService } from './services/cleanup.service.js';
 import { logger } from './services/logger.service.js';
+import { registerViteHook } from './vite-dev.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isDev = process.env.NODE_ENV !== 'production';
 
 export async function buildApp() {
   const config = getConfig();
@@ -47,7 +54,7 @@ export async function buildApp() {
     xXssProtection: true,
   });
 
-  // CORS
+  // CORS (kept for flexibility, effective only for cross-origin requests)
   await app.register(cors, {
     origin: config.cors.origins,
     credentials: true,
@@ -79,11 +86,31 @@ export async function buildApp() {
     }),
   });
 
+  // Production: serve built frontend static files
+  if (!isDev) {
+    const webDist = path.resolve(__dirname, '../../web/dist');
+    await app.register(fastifyStatic, {
+      root: webDist,
+      prefix: '/',
+      wildcard: false,
+    });
+  }
+
+  // Dev: register Vite middleware hook (actual Vite server initialized after listen)
+  if (isDev) {
+    registerViteHook(app);
+  }
+
   // 路由
   await app.register(routes, { prefix: '/api' });
 
-  // 404 处理
+  // 404 / SPA fallback
   app.setNotFoundHandler((request, reply) => {
+    // For non-API routes in production, serve index.html (SPA fallback)
+    if (!isDev && !request.url.startsWith('/api/')) {
+      return reply.sendFile('index.html');
+    }
+    // For API routes or dev (Vite handles SPA fallback), return 404
     return reply.status(404).send({
       success: false,
       error: { code: 'NOT_FOUND', message: '请求的资源不存在' },
@@ -114,6 +141,15 @@ export async function startServer() {
   await initConfig();
   const config = getConfig();
 
+  // 验证配置
+  const { validateConfig } = await import('./services/config.service.js');
+  const errors = validateConfig(config);
+  if (errors.length > 0) {
+    console.error('Configuration errors:');
+    errors.forEach((e) => console.error(`  - ${e}`));
+    process.exit(1);
+  }
+
   logger.info('Starting AirPortal server...', {
     nodeEnv: process.env.NODE_ENV || 'development',
     port: config.server.port,
@@ -135,8 +171,14 @@ export async function startServer() {
     host: config.server.host,
   });
 
+  // Dev: initialize Vite after listen (needs app.server for HMR)
+  if (process.env.NODE_ENV !== 'production') {
+    const { initViteDev } = await import('./vite-dev.js');
+    await initViteDev(app);
+  }
+
   logger.info(`Server running at http://${config.server.host}:${config.server.port}`);
-  logger.info(`API endpoint: http://${config.server.host}:${config.server.port}/api`);
+  logger.info(`Environment: ${isDev ? 'development' : 'production'}`);
 
   // 安全配置摘要
   logger.info('Security configuration', {

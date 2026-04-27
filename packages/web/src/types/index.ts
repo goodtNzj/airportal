@@ -35,4 +35,10 @@ export interface Config {
   maxTextLength: number;
   defaultExpiry: number;
   maxExpiry: number;
+  folderUploadEnabled: boolean;
+}
+
+export interface FolderTransferResult extends TransferResult {
+  fileCount: number;
+  folderName: string;
 }

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { FileUploader } from '../components/FileUploader';
+import { FolderUploader } from '../components/FolderUploader';
 import { TextInput } from '../components/TextInput';
 import { PickupCodeDisplay } from '../components/PickupCodeDisplay';
 import { transferApi } from '../services/api';
 import { useStore } from '../stores/useStore';
 import type { TransferResult } from '../types';
 
-type TransferType = 'file' | 'text';
+type TransferType = 'file' | 'text' | 'folder';
 
 export function SendPage() {
   const [transferType, setTransferType] = useState<TransferType>('file');
@@ -28,6 +29,19 @@ export function SendPage() {
       setResult(res);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || '上传失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFolderZip = async (zipBlob: Blob, folderName: string, fileCount: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await transferApi.uploadFolder(zipBlob, folderName, fileCount, expiresIn);
+      setResult(res);
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || '上传文件夹失败');
     } finally {
       setLoading(false);
     }
@@ -57,7 +71,7 @@ export function SendPage() {
         <p className="text-slate-500">上传后生成取件码，另一端通过取件码获取</p>
       </div>
 
-      <div className="flex justify-center gap-2">
+      <div className="flex justify-center gap-2 flex-wrap">
         <button
           onClick={() => setTransferType('file')}
           className={`px-6 py-2 rounded-full transition-colors ${
@@ -68,6 +82,18 @@ export function SendPage() {
         >
           发送文件
         </button>
+        {config?.folderUploadEnabled !== false && (
+          <button
+            onClick={() => setTransferType('folder')}
+            className={`px-6 py-2 rounded-full transition-colors ${
+              transferType === 'folder'
+                ? 'bg-primary-500 text-white'
+                : 'bg-white text-slate-600 border border-slate-200'
+            }`}
+          >
+            发送文件夹
+          </button>
+        )}
         <button
           onClick={() => setTransferType('text')}
           className={`px-6 py-2 rounded-full transition-colors ${
@@ -81,13 +107,21 @@ export function SendPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm p-6">
-        {transferType === 'file' ? (
+        {transferType === 'file' && (
           <FileUploader
             onUpload={handleFileUpload}
             loading={loading}
             maxSize={config?.maxFileSize}
           />
-        ) : (
+        )}
+        {transferType === 'folder' && (
+          <FolderUploader
+            onZipReady={handleFolderZip}
+            loading={loading}
+            maxSize={config?.maxFileSize}
+          />
+        )}
+        {transferType === 'text' && (
           <TextInput
             onSubmit={handleTextSubmit}
             loading={loading}

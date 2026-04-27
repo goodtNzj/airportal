@@ -20,7 +20,7 @@ model User {
 model Transfer {
   id            Int      @id @default(autoincrement())
   pickupCode    String   @unique @map("pickup_code")
-  contentType   String   @map("content_type")
+  contentType   String   @map("content_type") // 'text' | 'file' | 'folder'
 
   // 文本内容
   textContent   String?  @map("text_content")
@@ -30,6 +30,10 @@ model Transfer {
   fileSize      Int?     @map("file_size")
   filePath      String?  @map("file_path")
   fileMimeType  String?  @map("file_mime_type")
+
+  // 文件夹信息
+  fileCount     Int?     @map("file_count")
+  folderName    String?  @map("folder_name")
 
   // 用户关联
   userId        Int?     @map("user_id")

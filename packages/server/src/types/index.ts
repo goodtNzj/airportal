@@ -1,5 +1,5 @@
 export interface CreateTransferInput {
-  contentType: 'file' | 'text';
+  contentType: 'file' | 'text' | 'folder';
   textContent?: string;
   fileName?: string;
   fileSize?: number;
@@ -7,12 +7,36 @@ export interface CreateTransferInput {
   fileMimeType?: string;
   expiresIn?: number;
   userId?: number;
+  fileCount?: number;
+  folderName?: string;
 }
 
 export interface TransferResult {
   pickupCode: string;
   expiresAt: Date;
   expiresIn: number;
+  fileCount?: number;
+  folderName?: string;
+}
+
+export interface FolderMetadata {
+  fileCount: number;
+  folderName: string;
+  estimatedUncompressedSize: number;
+}
+
+export interface ZipValidationConfig {
+  maxUncompressedSize: number;
+  maxCompressionRatio: number;
+  maxEntries: number;
+  maxFileNameLength: number;
+}
+
+export interface ZipValidationResult {
+  valid: boolean;
+  reason?: string;
+  entryCount?: number;
+  estimatedUncompressedSize?: number;
 }
 
 export interface UserPayload {
@@ -30,4 +54,5 @@ export interface ConfigResponse {
   maxTextLength: number;
   defaultExpiry: number;
   maxExpiry: number;
+  folderUploadEnabled: boolean;
 }

@@ -4,10 +4,8 @@
   "private": true,
   "description": "AirPortal - 简单安全的文件传输应用",
   "scripts": {
-    "dev": "pnpm -r run dev",
-    "dev:server": "pnpm --filter @airportal/server dev",
-    "dev:web": "pnpm --filter @airportal/web dev",
-    "build": "pnpm -r run build",
+    "dev": "pnpm --filter @airportal/server dev",
+    "build": "pnpm --filter @airportal/web build && pnpm --filter @airportal/server build",
     "test": "pnpm --filter @airportal/server test && pnpm --filter @airportal/web test",
     "test:server": "pnpm --filter @airportal/server test",
     "test:web": "pnpm --filter @airportal/web test",

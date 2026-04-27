@@ -51,7 +51,15 @@ vi.mock('../../src/services/config.service.js', () => ({
       upload: {
         maxFileSize: 52428800,
         maxTextLength: 10000,
+        maxTotalStorage: 1073741824,
         blockedExtensions: ['.exe', '.bat', '.cmd', '.sh', '.ps1', '.vbs', '.msi'],
+        folderUpload: {
+          enabled: true,
+          maxUncompressedSize: 524288000,
+          maxCompressionRatio: 100,
+          maxEntries: 10000,
+          maxFileNameLength: 512,
+        },
       },
     },
     transfer: {

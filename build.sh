@@ -61,6 +61,20 @@ generate_prisma() {
     fi
 }
 
+# 构建前端
+build_web() {
+    log_step "构建前端..."
+    cd "$SCRIPT_DIR/packages/web"
+
+    pnpm build
+    if [ $? -ne 0 ]; then
+        log_error "前端构建失败"
+        exit 1
+    fi
+
+    log_info "前端构建完成 -> packages/web/dist/"
+}
+
 # 构建后端
 build_server() {
     log_step "构建后端..."
@@ -73,21 +87,7 @@ build_server() {
         exit 1
     fi
 
-    log_info "后端构建完成"
-}
-
-# 构建前端
-build_web() {
-    log_step "构建前端..."
-    cd "$SCRIPT_DIR/packages/web"
-
-    pnpm build
-    if [ $? -ne 0 ]; then
-        log_error "前端构建失败"
-        exit 1
-    fi
-
-    log_info "前端构建完成"
+    log_info "后端构建完成 -> packages/server/dist/"
 }
 
 # 创建部署包
@@ -103,7 +103,7 @@ create_package() {
     cp -r "$SCRIPT_DIR/packages/server/prisma" "$BUILD_DIR/$PACKAGE_NAME/server/"
     cp "$SCRIPT_DIR/packages/server/package.json" "$BUILD_DIR/$PACKAGE_NAME/server/"
 
-    # 复制前端文件
+    # 复制前端构建产物（由后端 @fastify/static 提供服务）
     log_info "复制前端文件..."
     mkdir -p "$BUILD_DIR/$PACKAGE_NAME/web"
     cp -r "$SCRIPT_DIR/packages/web/dist" "$BUILD_DIR/$PACKAGE_NAME/web/"
@@ -130,8 +130,14 @@ if [ ! -f .env ]; then
     echo "已创建 .env 文件，请根据需要修改配置"
 fi
 
+# 设置生产环境
+export NODE_ENV=production
+
 # 初始化数据库
 cd server
+npx prisma db push --skip-generate 2>/dev/null || true
+
+# 启动服务（单进程，同时处理 API 和静态文件）
 node dist/index.js
 EOF
     chmod +x "$BUILD_DIR/$PACKAGE_NAME/start.sh"
@@ -154,12 +160,12 @@ $VERSION
 ## 目录结构
 \`\`\`
 airportal/
-├── server/          # 后端服务
+├── server/          # 后端服务（同时提供前端静态文件）
 │   ├── dist/        # 编译后的代码
 │   ├── prisma/      # 数据库模型
 │   ├── data/        # SQLite 数据库（自动创建）
 │   └── uploads/     # 上传文件存储
-├── web/             # 前端静态文件
+├── web/             # 前端静态文件（由 server 提供服务）
 ├── logs/            # 日志目录
 ├── config.json      # 配置文件
 ├── .env             # 环境变量（需手动创建）
@@ -182,32 +188,26 @@ airportal/
    # 编辑 .env 文件，修改 JWT_SECRET 等配置
    \`\`\`
 
-4. 初始化数据库：
-   \`\`\`bash
-   npx prisma db push
-   \`\`\`
-
-5. 启动服务：
+4. 启动服务（单进程）：
    \`\`\`bash
    ./start.sh
-   # 或
-   cd server && node dist/index.js
    \`\`\`
-
-## 配置说明
-
-编辑 \`config.json\` 或 \`.env\` 文件修改：
-- 端口：PORT
-- JWT 密钥：JWT_SECRET
-- 取件码有效期：DEFAULT_EXPIRY
-- 文件大小限制：MAX_FILE_SIZE
-- 安全配置：FILE_VALIDATION, IP_BLACKLIST_ENABLED 等
 
 ## 访问地址
 
-- 前端：http://localhost:5173 (开发模式)
-- API：http://localhost:3000/api
-- 健康检查：http://localhost:3000/api/health
+- 单端口 (3000) 提供服务：http://localhost:3000
+- 前端界面：http://localhost:3000/
+- API 接口：http://localhost:3000/api/health
+
+## 配置说明
+
+编辑 \`config.json\` 或 \`.env\` 文件修改配置。
+关键配置项：
+- \`PORT\`: 服务端口（默认 3000）
+- \`JWT_SECRET\`: JWT 密钥（生产环境必须修改）
+- \`MAX_FILE_SIZE\`: 最大文件大小（默认 50MB）
+- \`FOLDER_UPLOAD_ENABLED\`: 是否启用文件夹上传
+- \`MAX_TOTAL_STORAGE\`: 总存储配额
 
 ## 生产部署建议
 
@@ -224,17 +224,11 @@ airportal/
        server_name your-domain.com;
 
        location / {
-           root /path/to/airportal/web;
-           try_files \$uri \$uri/ /index.html;
-       }
-
-       location /api {
            proxy_pass http://127.0.0.1:3000;
            client_max_body_size 50M;
        }
    }
    \`\`\`
-
 EOF
 
     log_info "部署包创建完成"
@@ -286,8 +280,8 @@ main() {
     clean
     install_deps
     generate_prisma
-    build_server
     build_web
+    build_server
     create_package
     compress
     show_result

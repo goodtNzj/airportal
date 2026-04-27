@@ -20,7 +20,7 @@ export function ReceivePage() {
         setError(null);
         alert('文本已复制到剪贴板！');
       } else {
-        // 文件下载
+        // 文件/文件夹下载
         setDownloading(true);
         const url = URL.createObjectURL(result);
         const a = document.createElement('a');

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { initConfig, getConfig } from '../../src/services/config.service.js';
+import { initConfig, getConfig, validateConfig } from '../../src/services/config.service.js';
 
 describe('ConfigService', () => {
   beforeAll(async () => {
@@ -46,6 +46,15 @@ describe('ConfigService', () => {
       const config = getConfig();
       expect(config.log.level).toBeTypeOf('string');
     });
+
+    it('should have upload folder config', () => {
+      const config = getConfig();
+      expect(config.security.upload.maxTotalStorage).toBeGreaterThan(0);
+      expect(config.security.upload.folderUpload).toBeDefined();
+      expect(config.security.upload.folderUpload.enabled).toBe(true);
+      expect(config.security.upload.folderUpload.maxEntries).toBe(10000);
+      expect(config.security.upload.folderUpload.maxCompressionRatio).toBe(100);
+    });
   });
 
   describe('security config', () => {
@@ -65,6 +74,32 @@ describe('ConfigService', () => {
       const config = getConfig();
       expect(config.security.rateLimit.globalMax).toBe(100);
       expect(config.security.rateLimit.uploadMax).toBe(10);
+    });
+  });
+
+  describe('validateConfig', () => {
+    it('should return no errors for valid config', () => {
+      const config = getConfig();
+      const errors = validateConfig(config);
+      expect(errors).toEqual([]);
+    });
+
+    it('should detect invalid port', () => {
+      const config = getConfig();
+      const errors = validateConfig({ ...config, server: { ...config.server, port: 0 } });
+      expect(errors.some((e) => e.includes('port'))).toBe(true);
+    });
+
+    it('should detect invalid maxExpiry', () => {
+      const config = getConfig();
+      const errors = validateConfig({ ...config, transfer: { ...config.transfer, maxExpiry: 10, defaultExpiry: 100 } });
+      expect(errors.some((e) => e.includes('maxExpiry'))).toBe(true);
+    });
+
+    it('should detect invalid recordAction', () => {
+      const config = getConfig();
+      const errors = validateConfig({ ...config, cleanup: { ...config.cleanup, recordAction: 'invalid' as any } });
+      expect(errors.some((e) => e.includes('recordAction'))).toBe(true);
     });
   });
 });
