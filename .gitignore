@@ -39,3 +39,8 @@ coverage/
 .cache/
 .temp/
 .tmp/
+
+# Build packages
+*.tar.gz
+*.tar.gz.sha256
+.airportal.pid
