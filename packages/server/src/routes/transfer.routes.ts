@@ -5,6 +5,8 @@ import { zipValidationService } from '../services/zip-validation.service.js';
 import { authMiddleware, optionalAuthMiddleware } from '../middlewares/auth.middleware.js';
 import { getConfig } from '../config/index.js';
 import { logger } from '../services/logger.service.js';
+import { ipBlacklistService } from '../services/ip-blacklist.service.js';
+import { pluginManager } from '../plugins/plugin-manager.js';
 import { z } from 'zod';
 
 export async function transferRoutes(app: FastifyInstance) {
@@ -137,6 +139,46 @@ export async function transferRoutes(app: FastifyInstance) {
             });
           }
 
+          // 安全插件扫描
+          if (config.security.securityPlugin?.enabled) {
+            const scanResult = await pluginManager.scanFile(buffer, {
+              filename: data.filename,
+              mimetype: data.mimetype,
+              size: buffer.length,
+              ip: request.ip,
+              userId,
+            });
+
+            logger.debug('Security scan completed', {
+              filename: data.filename,
+              verdict: scanResult.verdict,
+              riskScore: scanResult.riskScore,
+              reasons: scanResult.reasons,
+              duration: scanResult.duration,
+            });
+
+            if (scanResult.verdict === 'malicious') {
+              ipBlacklistService.recordFailedAttempt(request.ip, 'malicious file detected');
+              return reply.status(400).send({
+                success: false,
+                error: {
+                  code: 'SECURITY_BLOCK',
+                  message: '文件安全扫描未通过，上传被拒绝',
+                  reasons: scanResult.reasons,
+                },
+              });
+            }
+
+            if (scanResult.verdict === 'suspicious') {
+              logger.warn('Suspicious file detected', {
+                filename: data.filename,
+                riskScore: scanResult.riskScore,
+                reasons: scanResult.reasons,
+                ip: request.ip,
+              });
+            }
+          }
+
           const folderMetadata = isFolderUpload
             ? { fileCount, folderName, estimatedUncompressedSize: 0 }
             : undefined;
@@ -157,6 +199,33 @@ export async function transferRoutes(app: FastifyInstance) {
 
         // 文本上传
         const body = textUploadSchema.parse(request.body);
+
+        // 安全插件文本扫描
+        if (config.security.securityPlugin?.enabled) {
+          const scanResult = await pluginManager.scanText(body.text, {
+            ip: request.ip,
+            userId,
+          });
+
+          logger.debug('Text security scan', {
+            verdict: scanResult.verdict,
+            riskScore: scanResult.riskScore,
+            reasons: scanResult.reasons,
+          });
+
+          if (scanResult.verdict === 'malicious') {
+            ipBlacklistService.recordFailedAttempt(request.ip, 'malicious text detected');
+            return reply.status(400).send({
+              success: false,
+              error: {
+                code: 'SECURITY_BLOCK',
+                message: '文本安全扫描未通过，发送被拒绝',
+                reasons: scanResult.reasons,
+              },
+            });
+          }
+        }
+
         const result = await transferService.createTextTransfer(
           body.text,
           body.expiresIn || config.transfer.defaultExpiry,

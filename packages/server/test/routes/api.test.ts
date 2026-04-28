@@ -61,6 +61,24 @@ vi.mock('../../src/services/config.service.js', () => ({
           maxFileNameLength: 512,
         },
       },
+      securityPlugin: {
+        enabled: true,
+        heuristic: {
+          enabled: true,
+          entropyThreshold: 7.5,
+          maxScanSize: 10485760,
+          rejectRiskThreshold: 70,
+          warnRiskThreshold: 40,
+          patterns: [],
+        },
+        behavior: {
+          enabled: true,
+          windowMs: 60000,
+          burstThreshold: 5,
+          sizeMultiplierThreshold: 3,
+          anomalyScoreThreshold: 50,
+        },
+      },
     },
     transfer: {
       codeLength: 6,
@@ -131,6 +149,61 @@ vi.mock('../../src/services/ip-blacklist.service.js', () => ({
 vi.mock('../../src/services/file-type.service.js', () => ({
   fileValidationService: {
     validateFile: vi.fn().mockReturnValue({ valid: true, isDangerous: false }),
+  },
+}));
+
+vi.mock('../../src/plugins/plugin-manager.js', () => ({
+  pluginManager: {
+    register: vi.fn(),
+    initialize: vi.fn(),
+    shutdown: vi.fn(),
+    scanFile: vi.fn().mockResolvedValue({
+      verdict: 'clean',
+      riskScore: 0,
+      reasons: [],
+      scannedAt: new Date(),
+      duration: 0,
+    }),
+    scanText: vi.fn().mockResolvedValue({
+      verdict: 'clean',
+      riskScore: 0,
+      reasons: [],
+      scannedAt: new Date(),
+      duration: 0,
+    }),
+    getPlugins: vi.fn().mockReturnValue([]),
+  },
+}));
+
+vi.mock('../../src/plugins/heuristic-scanner.js', () => ({
+  heuristicScanner: {
+    name: 'heuristic-scanner',
+    version: '1.0.0',
+    initialize: vi.fn(),
+    scanFile: vi.fn().mockResolvedValue({
+      verdict: 'clean',
+      riskScore: 0,
+      reasons: [],
+      scannedAt: new Date(),
+      duration: 0,
+    }),
+    shutdown: vi.fn(),
+  },
+}));
+
+vi.mock('../../src/plugins/behavior-tracker.js', () => ({
+  behaviorTracker: {
+    name: 'behavior-tracker',
+    version: '1.0.0',
+    initialize: vi.fn(),
+    scanFile: vi.fn().mockResolvedValue({
+      verdict: 'clean',
+      riskScore: 0,
+      reasons: [],
+      scannedAt: new Date(),
+      duration: 0,
+    }),
+    shutdown: vi.fn(),
   },
 }));
 

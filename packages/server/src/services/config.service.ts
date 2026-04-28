@@ -11,6 +11,29 @@ export interface FolderUploadConfig {
   maxFileNameLength: number;
 }
 
+export interface SecurityPluginHeuristicConfig {
+  enabled: boolean;
+  entropyThreshold: number;
+  maxScanSize: number;
+  rejectRiskThreshold: number;
+  warnRiskThreshold: number;
+  patterns: { name: string; regex: string; weight: number }[];
+}
+
+export interface SecurityPluginBehaviorConfig {
+  enabled: boolean;
+  windowMs: number;
+  burstThreshold: number;
+  sizeMultiplierThreshold: number;
+  anomalyScoreThreshold: number;
+}
+
+export interface SecurityPluginConfig {
+  enabled: boolean;
+  heuristic: SecurityPluginHeuristicConfig;
+  behavior: SecurityPluginBehaviorConfig;
+}
+
 export interface SecurityConfig {
   fileValidation: {
     enabled: boolean;
@@ -39,6 +62,7 @@ export interface SecurityConfig {
     blockedExtensions: string[];
     folderUpload: FolderUploadConfig;
   };
+  securityPlugin: SecurityPluginConfig;
 }
 
 export interface AppConfig {
@@ -159,6 +183,24 @@ export async function initConfig(): Promise<AppConfig> {
         uploadMax: getValue('UPLOAD_RATE_MAX', configFile?.security?.rateLimit?.uploadMax, 10, Number),
         uploadWindowMs: getValue('UPLOAD_RATE_WINDOW', configFile?.security?.rateLimit?.uploadWindowMs, 60000, Number),
       },
+      securityPlugin: {
+        enabled: getValue('SECURITY_PLUGIN_ENABLED', (configFile?.security as any)?.securityPlugin?.enabled, true, (v) => v !== 'false'),
+        heuristic: {
+          enabled: getValue('HEURISTIC_ENABLED', (configFile?.security as any)?.securityPlugin?.heuristic?.enabled, true, (v) => v !== 'false'),
+          entropyThreshold: getValue('HEURISTIC_ENTROPY_THRESHOLD', (configFile?.security as any)?.securityPlugin?.heuristic?.entropyThreshold, 7.5, Number),
+          maxScanSize: getValue('HEURISTIC_MAX_SCAN_SIZE', (configFile?.security as any)?.securityPlugin?.heuristic?.maxScanSize, 10485760, Number),
+          rejectRiskThreshold: getValue('HEURISTIC_REJECT_THRESHOLD', (configFile?.security as any)?.securityPlugin?.heuristic?.rejectRiskThreshold, 70, Number),
+          warnRiskThreshold: getValue('HEURISTIC_WARN_THRESHOLD', (configFile?.security as any)?.securityPlugin?.heuristic?.warnRiskThreshold, 40, Number),
+          patterns: (configFile?.security as any)?.securityPlugin?.heuristic?.patterns ?? [],
+        },
+        behavior: {
+          enabled: getValue('BEHAVIOR_ENABLED', (configFile?.security as any)?.securityPlugin?.behavior?.enabled, true, (v) => v !== 'false'),
+          windowMs: getValue('BEHAVIOR_WINDOW_MS', (configFile?.security as any)?.securityPlugin?.behavior?.windowMs, 60000, Number),
+          burstThreshold: getValue('BEHAVIOR_BURST_THRESHOLD', (configFile?.security as any)?.securityPlugin?.behavior?.burstThreshold, 5, Number),
+          sizeMultiplierThreshold: getValue('BEHAVIOR_SIZE_MULTIPLIER', (configFile?.security as any)?.securityPlugin?.behavior?.sizeMultiplierThreshold, 3, Number),
+          anomalyScoreThreshold: getValue('BEHAVIOR_ANOMALY_THRESHOLD', (configFile?.security as any)?.securityPlugin?.behavior?.anomalyScoreThreshold, 50, Number),
+        },
+      },
       upload: {
         maxFileSize: getValue('MAX_FILE_SIZE', configFile?.security?.upload?.maxFileSize, 52428800, Number),
         maxTextLength: getValue('MAX_TEXT_LENGTH', configFile?.security?.upload?.maxTextLength, 10000, Number),
@@ -254,6 +296,18 @@ export function validateConfig(config: AppConfig): string[] {
     }
     if (config.security.upload.folderUpload.maxEntries < 1) {
       errors.push('security.upload.folderUpload.maxEntries 必须大于 0');
+    }
+  }
+  if (config.security.securityPlugin) {
+    if (config.security.securityPlugin.heuristic) {
+      if (config.security.securityPlugin.heuristic.rejectRiskThreshold < config.security.securityPlugin.heuristic.warnRiskThreshold) {
+        errors.push('security.securityPlugin.heuristic.rejectRiskThreshold 不能小于 warnRiskThreshold');
+      }
+    }
+    if (config.security.securityPlugin.behavior) {
+      if (config.security.securityPlugin.behavior.windowMs < 1000) {
+        errors.push('security.securityPlugin.behavior.windowMs 必须至少为 1000ms');
+      }
     }
   }
 

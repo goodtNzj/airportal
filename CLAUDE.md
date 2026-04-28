@@ -40,6 +40,7 @@ pnpm start            # Start production server (single process, port 3000)
 - Vite integration: `src/vite-dev.ts`
 - Routes: `src/routes/` (auth, transfers, security/ip)
 - Services: `src/services/` - business logic layer
+- Plugins: `src/plugins/` - security plugin system (pluggable, configurable)
 - Database schema: `prisma/schema.prisma`
 
 **Core Services:**
@@ -49,6 +50,14 @@ pnpm start            # Start production server (single process, port 3000)
 - `fileValidationService` - Magic number file type detection
 - `zipValidationService` - ZIP archive security validation (path traversal, zip bomb detection)
 - `ipBlacklistService` - IP blocking with auto-ban
+
+**Security Plugin System (`src/plugins/`):**
+Pluggable, configurable security analysis pipeline. Each plugin implements the `SecurityPlugin` interface.
+- `PluginManager` (`plugin-manager.ts`) - Singleton that registers plugins, orchestrates scans, aggregates results (worst verdict wins, deduplicates reasons)
+- `HeuristicScanner` (`heuristic-scanner.ts`) - Shannon entropy analysis + regex pattern matching for code exec, shell commands, SQL injection, XSS, destructive commands, reverse shells, etc. Configurable pattern list with weights.
+- `BehaviorTracker` (`behavior-tracker.ts`) - In-memory per-IP behavior anomaly detection (burst uploads, size outliers). Feeds into `ipBlacklistService` when anomaly scores exceed threshold.
+
+Configuration path: `config.json → security.securityPlugin.*`. All plugins individually toggleable. Env var overrides: `SECURITY_PLUGIN_ENABLED`, `HEURISTIC_*`, `BEHAVIOR_*`.
 
 ### Frontend (`packages/web`)
 - **React 18 + Vite 5 + TailwindCSS**
@@ -93,6 +102,7 @@ All configurable via `config.json`:
 - Helmet.js security headers
 - Path traversal prevention on file writes
 - Disk quota enforcement
+- Security plugin system (heuristic scanning + behavior anomaly detection)
 
 ## Testing
 
