@@ -25,13 +25,19 @@ export async function buildApp() {
   });
 
   // 安全中间件
+  const scriptSources = ["'self'"];
+  if (isDev) {
+    // Vite dev mode needs inline scripts for React Refresh preamble
+    scriptSources.push("'unsafe-inline'");
+  }
+
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:'],
-        scriptSrc: ["'self'"],
+        scriptSrc: scriptSources,
         frameAncestors: ["'none'"],
         formAction: ["'self'"],
       },
