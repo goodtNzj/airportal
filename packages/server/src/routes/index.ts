@@ -4,12 +4,38 @@ import { transferRoutes } from './transfer.routes.js';
 import { auditMiddleware, ipBlacklistRoutes } from '../middlewares/audit.middleware.js';
 import { getConfig } from '../config/index.js';
 import { ipBlacklistService } from '../services/ip-blacklist.service.js';
+import { logger } from '../services/logger.service.js';
 
 export async function routes(app: FastifyInstance) {
   const config = getConfig();
 
   // 初始化 IP 黑名单服务
   ipBlacklistService.init();
+
+  // 初始化安全插件系统
+  if (config.security.securityPlugin?.enabled) {
+    const { pluginManager } = await import('../plugins/plugin-manager.js');
+    const { heuristicScanner } = await import('../plugins/heuristic-scanner.js');
+    const { behaviorTracker } = await import('../plugins/behavior-tracker.js');
+
+    if (config.security.securityPlugin.heuristic?.enabled) {
+      pluginManager.register(heuristicScanner);
+    }
+    if (config.security.securityPlugin.behavior?.enabled) {
+      pluginManager.register(behaviorTracker);
+    }
+
+    try {
+      await pluginManager.initialize();
+      logger.info('Security plugin system initialized', {
+        plugins: pluginManager.getPlugins(),
+      });
+    } catch (error) {
+      logger.error('Security plugin initialization failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   // 全局审计中间件
   if (config.security.auditLog.enabled) {

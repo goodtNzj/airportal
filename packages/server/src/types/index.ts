@@ -56,3 +56,5 @@ export interface ConfigResponse {
   maxExpiry: number;
   folderUploadEnabled: boolean;
 }
+
+export type { FileMetadata, ScanResult, SecurityPlugin } from '../plugins/types.js';
