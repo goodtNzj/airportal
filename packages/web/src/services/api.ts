@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { TransferResult, AuthResult, Config, User } from '../types';
+import type { TransferResult, AuthResult, Config, User, UploadOptions } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -59,31 +59,21 @@ export const transferApi = {
     return res.data.data;
   },
 
-  uploadFile: async (file: File, expiresIn?: number): Promise<TransferResult> => {
+  uploadFile: async (file: File, options?: UploadOptions): Promise<TransferResult> => {
     const formData = new FormData();
     formData.append('file', file);
-    if (expiresIn) {
-      formData.append('expiresIn', expiresIn.toString());
-    }
-    const res = await api.post<{ success: boolean; data: TransferResult }>('/transfers', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return res.data.data;
-  },
 
-  uploadFolder: async (zipBlob: Blob, folderName: string, fileCount: number, expiresIn?: number): Promise<TransferResult> => {
-    const formData = new FormData();
-    formData.append('file', zipBlob, `${folderName}.zip`);
-    if (expiresIn) {
-      formData.append('expiresIn', expiresIn.toString());
-    }
     const params = new URLSearchParams();
-    params.append('type', 'folder');
-    params.append('folderName', folderName);
-    params.append('fileCount', fileCount.toString());
-    if (expiresIn) {
-      params.append('expiresIn', expiresIn.toString());
+    if (options?.expiresIn) {
+      params.append('expiresIn', options.expiresIn.toString());
     }
+    if (options?.maxDownloads !== undefined) {
+      params.append('maxDownloads', options.maxDownloads.toString());
+    }
+    if (options?.ownerOnly) {
+      params.append('ownerOnly', 'true');
+    }
+
     const res = await api.post<{ success: boolean; data: TransferResult }>(
       `/transfers?${params.toString()}`,
       formData,
@@ -92,10 +82,38 @@ export const transferApi = {
     return res.data.data;
   },
 
-  uploadText: async (text: string, expiresIn?: number): Promise<TransferResult> => {
+  uploadFolder: async (zipBlob: Blob, folderName: string, fileCount: number, options?: UploadOptions): Promise<TransferResult> => {
+    const formData = new FormData();
+    formData.append('file', zipBlob, `${folderName}.zip`);
+
+    const params = new URLSearchParams();
+    params.append('type', 'folder');
+    params.append('folderName', folderName);
+    params.append('fileCount', fileCount.toString());
+    if (options?.expiresIn) {
+      params.append('expiresIn', options.expiresIn.toString());
+    }
+    if (options?.maxDownloads !== undefined) {
+      params.append('maxDownloads', options.maxDownloads.toString());
+    }
+    if (options?.ownerOnly) {
+      params.append('ownerOnly', 'true');
+    }
+
+    const res = await api.post<{ success: boolean; data: TransferResult }>(
+      `/transfers?${params.toString()}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return res.data.data;
+  },
+
+  uploadText: async (text: string, options?: UploadOptions): Promise<TransferResult> => {
     const res = await api.post<{ success: boolean; data: TransferResult }>('/transfers', {
       text,
-      expiresIn,
+      expiresIn: options?.expiresIn,
+      maxDownloads: options?.maxDownloads,
+      ownerOnly: options?.ownerOnly,
     });
     return res.data.data;
   },

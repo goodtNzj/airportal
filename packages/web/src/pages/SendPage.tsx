@@ -12,10 +12,12 @@ type TransferType = 'file' | 'text' | 'folder';
 export function SendPage() {
   const [transferType, setTransferType] = useState<TransferType>('file');
   const [expiresIn, setExpiresIn] = useState(180);
+  const [maxDownloads, setMaxDownloads] = useState(1);
+  const [ownerOnly, setOwnerOnly] = useState(false);
   const [result, setResult] = useState<TransferResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { config, setConfig } = useStore();
+  const { config, setConfig, user } = useStore();
 
   useEffect(() => {
     transferApi.getConfig().then(setConfig).catch(console.error);
@@ -25,7 +27,7 @@ export function SendPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await transferApi.uploadFile(file, expiresIn);
+      const res = await transferApi.uploadFile(file, { expiresIn, maxDownloads, ownerOnly });
       setResult(res);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || '上传失败');
@@ -38,7 +40,7 @@ export function SendPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await transferApi.uploadFolder(zipBlob, folderName, fileCount, expiresIn);
+      const res = await transferApi.uploadFolder(zipBlob, folderName, fileCount, { expiresIn, maxDownloads, ownerOnly });
       setResult(res);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || '上传文件夹失败');
@@ -51,7 +53,7 @@ export function SendPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await transferApi.uploadText(text, expiresIn);
+      const res = await transferApi.uploadText(text, { expiresIn, maxDownloads, ownerOnly });
       setResult(res);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || '发送失败');
@@ -133,19 +135,56 @@ export function SendPage() {
           <p className="mt-4 text-center text-red-500 text-sm">{error}</p>
         )}
 
-        <div className="mt-6 flex items-center justify-center gap-4">
-          <label className="text-sm text-slate-500">有效期:</label>
-          <select
-            value={expiresIn}
-            onChange={(e) => setExpiresIn(Number(e.target.value))}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value={180}>3 分钟</option>
-            <option value={300}>5 分钟</option>
-            <option value={600}>10 分钟</option>
-            <option value={1800}>30 分钟</option>
-            <option value={3600}>1 小时</option>
-          </select>
+        <div className="mt-6 space-y-4">
+          <div className="flex items-center justify-center gap-4">
+            <label className="text-sm text-slate-500">有效期:</label>
+            <select
+              value={expiresIn}
+              onChange={(e) => setExpiresIn(Number(e.target.value))}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value={180}>3 分钟</option>
+              <option value={300}>5 分钟</option>
+              <option value={600}>10 分钟</option>
+              <option value={1800}>30 分钟</option>
+              <option value={3600}>1 小时</option>
+            </select>
+          </div>
+
+          <div className="flex items-center justify-center gap-4">
+            <label className="text-sm text-slate-500">可领取次数:</label>
+            <select
+              value={maxDownloads}
+              onChange={(e) => setMaxDownloads(Number(e.target.value))}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value={1}>1 次</option>
+              <option value={2}>2 次</option>
+              <option value={5}>5 次</option>
+              <option value={10}>10 次</option>
+              <option value={0}>不限次数</option>
+            </select>
+          </div>
+
+          {user && (
+            <div className="flex items-center justify-center gap-4">
+              <label className="text-sm text-slate-500">仅限本人领取:</label>
+              <button
+                type="button"
+                onClick={() => setOwnerOnly(!ownerOnly)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  ownerOnly ? 'bg-primary-500' : 'bg-slate-200'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    ownerOnly ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <span className="text-xs text-slate-400">开启后仅您可领取</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

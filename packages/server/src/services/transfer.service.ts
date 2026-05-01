@@ -31,13 +31,20 @@ export class TransferService {
   async createTextTransfer(
     textContent: string,
     expiresIn: number,
-    userId?: number
+    userId?: number,
+    maxDownloads: number = 1,
+    ownerOnly: boolean = false
   ): Promise<TransferResult> {
     const config = getConfig();
 
     // 验证文本长度
     if (textContent.length > config.security.upload.maxTextLength) {
       throw new Error(`文本长度超过限制（最大 ${config.security.upload.maxTextLength} 字符）`);
+    }
+
+    // ownerOnly 需要登录
+    if (ownerOnly && !userId) {
+      throw new Error('仅限创建者领取功能需要登录');
     }
 
     // 限制有效期
@@ -53,6 +60,8 @@ export class TransferService {
         textContent,
         expiresAt,
         userId: userId || null,
+        maxDownloads: maxDownloads === 0 ? 999999 : maxDownloads,
+        ownerOnly,
       },
     });
 
@@ -74,7 +83,9 @@ export class TransferService {
     },
     expiresIn: number,
     userId?: number,
-    folderMetadata?: FolderMetadata
+    folderMetadata?: FolderMetadata,
+    maxDownloads: number = 1,
+    ownerOnly: boolean = false
   ): Promise<TransferResult> {
     const config = getConfig();
 
@@ -92,6 +103,11 @@ export class TransferService {
       if (config.security.upload.blockedExtensions.includes(ext)) {
         throw new Error('不支持的文件类型');
       }
+    }
+
+    // ownerOnly 需要登录
+    if (ownerOnly && !userId) {
+      throw new Error('仅限创建者领取功能需要登录');
     }
 
     const pickupCode = await this.generateUniqueCode();
@@ -126,6 +142,8 @@ export class TransferService {
         folderName: folderMetadata?.folderName ?? null,
         expiresAt,
         userId: userId || null,
+        maxDownloads: maxDownloads === 0 ? 999999 : maxDownloads,
+        ownerOnly,
       },
     });
 
@@ -179,7 +197,7 @@ export class TransferService {
     }
   }
 
-  async getTransfer(pickupCode: string) {
+  async getTransfer(pickupCode: string, requestUserId?: number) {
     const transfer = await prisma.transfer.findUnique({
       where: { pickupCode },
       include: { user: { select: { username: true } } },
@@ -196,7 +214,18 @@ export class TransferService {
       throw new Error('取件码已过期');
     }
 
-    if (transfer.downloadCount >= transfer.maxDownloads) {
+    // 检查 ownerOnly 权限
+    if (transfer.ownerOnly) {
+      if (!requestUserId) {
+        throw new Error('此内容需要登录后领取');
+      }
+      if (requestUserId !== transfer.userId) {
+        throw new Error('此内容仅限创建者领取');
+      }
+    }
+
+    // maxDownloads=999999 表示不限次数
+    if (transfer.maxDownloads < 999999 && transfer.downloadCount >= transfer.maxDownloads) {
       logger.warn('Max downloads reached', { pickupCode, count: transfer.downloadCount });
       throw new Error('已达到最大下载次数');
     }

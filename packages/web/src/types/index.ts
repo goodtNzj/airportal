@@ -38,6 +38,12 @@ export interface Config {
   folderUploadEnabled: boolean;
 }
 
+export interface UploadOptions {
+  expiresIn?: number;
+  maxDownloads?: number;
+  ownerOnly?: boolean;
+}
+
 export interface FolderTransferResult extends TransferResult {
   fileCount: number;
   folderName: string;

@@ -42,6 +42,7 @@ model Transfer {
   // 元数据
   downloadCount Int      @default(0) @map("download_count")
   maxDownloads  Int      @default(1) @map("max_downloads")
+  ownerOnly     Boolean  @default(false) @map("owner_only")
 
   // 时间
   createdAt     DateTime @default(now()) @map("created_at")

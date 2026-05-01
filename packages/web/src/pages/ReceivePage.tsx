@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { CodeInput } from '../components/CodeInput';
 import { transferApi } from '../services/api';
+import { useStore } from '../stores/useStore';
 
 export function ReceivePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const { user } = useStore();
 
   const handleSubmit = async (code: string) => {
     setLoading(true);
@@ -33,7 +35,19 @@ export function ReceivePage() {
         setDownloading(false);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || '获取失败');
+      const errorMessage = err.response?.data?.error?.message || '获取失败';
+      const statusCode = err.response?.status;
+
+      // 处理 ownerOnly 相关错误
+      if (statusCode === 403) {
+        if (!user) {
+          setError('此内容需要登录后领取，请先登录');
+        } else {
+          setError('此内容仅限创建者领取');
+        }
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }

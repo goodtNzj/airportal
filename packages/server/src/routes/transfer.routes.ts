@@ -15,6 +15,8 @@ export async function transferRoutes(app: FastifyInstance) {
   const textUploadSchema = z.object({
     text: z.string().min(1).max(config.security.upload.maxTextLength),
     expiresIn: z.number().min(1).max(config.transfer.maxExpiry).optional(),
+    maxDownloads: z.number().min(0).max(1000).optional(),
+    ownerOnly: z.boolean().optional(),
   });
 
   // 获取配置
@@ -33,8 +35,8 @@ export async function transferRoutes(app: FastifyInstance) {
 
   // 创建传输
   app.post<{
-    Body: { text?: string; expiresIn?: number };
-    Querystring: { type?: string; folderName?: string; fileCount?: string; expiresIn?: string };
+    Body: { text?: string; expiresIn?: number; maxDownloads?: number; ownerOnly?: boolean };
+    Querystring: { type?: string; folderName?: string; fileCount?: string; expiresIn?: string; maxDownloads?: string; ownerOnly?: string };
   }>(
     '/',
     {
@@ -72,6 +74,16 @@ export async function transferRoutes(app: FastifyInstance) {
             parseInt(request.query.expiresIn || '') || config.transfer.defaultExpiry,
             config.transfer.maxExpiry
           );
+          const maxDownloads = parseInt(request.query.maxDownloads || '') || 1;
+          const ownerOnly = request.query.ownerOnly === 'true';
+
+          // ownerOnly 需要登录
+          if (ownerOnly && !userId) {
+            return reply.status(400).send({
+              success: false,
+              error: { code: 'LOGIN_REQUIRED', message: '仅限创建者领取功能需要登录' },
+            });
+          }
 
           // 文件夹上传 ZIP 安全验证
           if (isFolderUpload && config.security.upload.folderUpload.enabled) {
@@ -191,7 +203,9 @@ export async function transferRoutes(app: FastifyInstance) {
             },
             expiresIn,
             userId,
-            folderMetadata
+            folderMetadata,
+            maxDownloads,
+            ownerOnly
           );
 
           return reply.send({ success: true, data: result });
@@ -199,6 +213,14 @@ export async function transferRoutes(app: FastifyInstance) {
 
         // 文本上传
         const body = textUploadSchema.parse(request.body);
+
+        // ownerOnly 需要登录
+        if (body.ownerOnly && !userId) {
+          return reply.status(400).send({
+            success: false,
+            error: { code: 'LOGIN_REQUIRED', message: '仅限创建者领取功能需要登录' },
+          });
+        }
 
         // 安全插件文本扫描
         if (config.security.securityPlugin?.enabled) {
@@ -229,7 +251,9 @@ export async function transferRoutes(app: FastifyInstance) {
         const result = await transferService.createTextTransfer(
           body.text,
           body.expiresIn || config.transfer.defaultExpiry,
-          userId
+          userId,
+          body.maxDownloads ?? 1,
+          body.ownerOnly ?? false
         );
 
         return reply.send({ success: true, data: result });
@@ -249,9 +273,13 @@ export async function transferRoutes(app: FastifyInstance) {
   );
 
   // 获取传输内容
-  app.get<{ Params: { code: string } }>('/:code', async (request, reply) => {
+  app.get<{ Params: { code: string } }>(
+    '/:code',
+    { preHandler: optionalAuthMiddleware },
+    async (request, reply) => {
     const config = getConfig();
     const { code } = request.params;
+    const userId = request.user?.userId;
 
     // 验证取件码格式
     if (!code || code.length !== config.transfer.codeLength || !/^[A-HJ-NP-Z2-9]+$/i.test(code)) {
@@ -262,7 +290,7 @@ export async function transferRoutes(app: FastifyInstance) {
     }
 
     try {
-      const transfer = await transferService.getTransfer(code.toUpperCase());
+      const transfer = await transferService.getTransfer(code.toUpperCase(), userId);
 
       if (transfer.contentType === 'text') {
         return reply.send({
@@ -298,10 +326,15 @@ export async function transferRoutes(app: FastifyInstance) {
         .send(fileBuffer);
     } catch (error) {
       const message = error instanceof Error ? error.message : '获取失败';
-      const statusCode = message.includes('不存在') || message.includes('过期') ? 404 : 400;
+      let statusCode = 400;
+      if (message.includes('不存在') || message.includes('过期')) {
+        statusCode = 404;
+      } else if (message.includes('登录') || message.includes('创建者')) {
+        statusCode = 403;
+      }
       return reply.status(statusCode).send({
         success: false,
-        error: { code: 'NOT_FOUND', message },
+        error: { code: 'ACCESS_DENIED', message },
       });
     }
   });

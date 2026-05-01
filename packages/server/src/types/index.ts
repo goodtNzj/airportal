@@ -9,6 +9,8 @@ export interface CreateTransferInput {
   userId?: number;
   fileCount?: number;
   folderName?: string;
+  maxDownloads?: number;
+  ownerOnly?: boolean;
 }
 
 export interface TransferResult {
