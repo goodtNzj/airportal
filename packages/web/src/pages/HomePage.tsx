@@ -21,7 +21,7 @@ export function HomePage() {
         <p className="text-slate-500">简单安全的跨设备文件传输</p>
       </div>
 
-      <div className="flex justify-center gap-4 mb-8">
+      <div className="flex justify-center gap-4 mb-6 flex-wrap">
         <Link
           to="/send"
           className="px-8 py-4 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors flex items-center gap-2"
@@ -40,6 +40,25 @@ export function HomePage() {
           </svg>
           接收
         </Link>
+      </div>
+
+      {/* P2P Entry */}
+      <div className="mb-8">
+        <Link
+          to="/p2p"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"
+            />
+          </svg>
+          局域网直传
+        </Link>
+        <p className="text-sm text-slate-400 mt-2">同一局域网下设备直接传输，无需经过服务器</p>
       </div>
 
       <div className="text-sm text-slate-400 space-y-1">

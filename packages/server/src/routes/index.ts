@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authRoutes } from './auth.routes.js';
 import { transferRoutes } from './transfer.routes.js';
+import { p2pRoutes } from './p2p.routes.js';
 import { auditMiddleware, ipBlacklistRoutes } from '../middlewares/audit.middleware.js';
 import { getConfig } from '../config/index.js';
 import { ipBlacklistService } from '../services/ip-blacklist.service.js';
@@ -52,6 +53,9 @@ export async function routes(app: FastifyInstance) {
 
   // 传输路由
   app.register(transferRoutes, { prefix: '/transfers' });
+
+  // P2P 路由
+  app.register(p2pRoutes, { prefix: '/p2p' });
 
   // IP 黑名单管理路由
   app.register(ipBlacklistRoutes, { prefix: '/security/ip' });

@@ -34,6 +34,13 @@ export interface SecurityPluginConfig {
   behavior: SecurityPluginBehaviorConfig;
 }
 
+export interface P2PConfig {
+  enabled: boolean;
+  maxFileSize: number;
+  maxConcurrentTransfers: number;
+  requestTimeout: number;
+}
+
 export interface SecurityConfig {
   fileValidation: {
     enabled: boolean;
@@ -97,6 +104,7 @@ export interface AppConfig {
   cors: {
     origins: string[];
   };
+  p2p: P2PConfig;
 }
 
 /**
@@ -238,6 +246,13 @@ export async function initConfig(): Promise<AppConfig> {
     cors: {
       origins: process.env.ALLOWED_ORIGINS?.split(',') ?? configFile?.cors?.origins ?? ['http://localhost:3000'],
     },
+
+    p2p: {
+      enabled: getValue('P2P_ENABLED', (configFile as any)?.p2p?.enabled, true, (v) => v !== 'false'),
+      maxFileSize: getValue('P2P_MAX_FILE_SIZE', (configFile as any)?.p2p?.maxFileSize, 524288000, Number),
+      maxConcurrentTransfers: getValue('P2P_MAX_CONCURRENT', (configFile as any)?.p2p?.maxConcurrentTransfers, 3, Number),
+      requestTimeout: getValue('P2P_REQUEST_TIMEOUT', (configFile as any)?.p2p?.requestTimeout, 60000, Number),
+    },
   };
 
   return loadedConfig;
@@ -308,6 +323,19 @@ export function validateConfig(config: AppConfig): string[] {
       if (config.security.securityPlugin.behavior.windowMs < 1000) {
         errors.push('security.securityPlugin.behavior.windowMs 必须至少为 1000ms');
       }
+    }
+  }
+
+  // P2P config validation
+  if (config.p2p) {
+    if (config.p2p.maxFileSize < 1) {
+      errors.push('p2p.maxFileSize 必须大于 0');
+    }
+    if (config.p2p.maxConcurrentTransfers < 1) {
+      errors.push('p2p.maxConcurrentTransfers 必须大于 0');
+    }
+    if (config.p2p.requestTimeout < 1000) {
+      errors.push('p2p.requestTimeout 必须至少为 1000ms');
     }
   }
 

@@ -26,9 +26,13 @@ export async function buildApp() {
 
   // 安全中间件
   const scriptSources = ["'self'"];
+  const connectSources = ["'self'"];
   if (isDev) {
     // Vite dev mode needs inline scripts for React Refresh preamble
     scriptSources.push("'unsafe-inline'");
+    // HMR WebSocket runs on a dedicated port (different origin from 'self');
+    // allow ws/wss so the HMR client isn't blocked by CSP.
+    connectSources.push('ws:', 'wss:');
   }
 
   await app.register(helmet, {
@@ -38,6 +42,7 @@ export async function buildApp() {
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:'],
         scriptSrc: scriptSources,
+        connectSrc: connectSources,
         frameAncestors: ["'none'"],
         formAction: ["'self'"],
       },

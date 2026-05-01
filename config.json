@@ -90,5 +90,12 @@
   "log": {
     "level": "info",
     "file": ""
+  },
+  "p2p": {
+    "enabled": true,
+    "maxFileSize": 524288000,
+    "maxConcurrentTransfers": 3,
+    "requestTimeout": 60000,
+    "description": "P2P局域网直传配置 - 设备发现和直接文件传输"
   }
 }
