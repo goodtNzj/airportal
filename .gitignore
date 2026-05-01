@@ -32,6 +32,10 @@ npm-debug.log*
 *.swo
 .DS_Store
 
+# AI tools
+.claude/
+.qoder/
+
 # Testing
 coverage/
 
