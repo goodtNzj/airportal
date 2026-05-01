@@ -82,7 +82,6 @@ export async function buildApp() {
   await app.register(rateLimit, {
     max: config.security.rateLimit.globalMax,
     timeWindow: config.security.rateLimit.globalWindowMs,
-    trustProxy: true,
     keyGenerator: (request) => {
       return request.headers['x-forwarded-for']?.toString().split(',')[0] || request.ip;
     },
@@ -125,9 +124,10 @@ export async function buildApp() {
 
   // 错误处理
   app.setErrorHandler((error, request, reply) => {
+    const err = error as Error;
     logger.error('Unhandled error', {
-      error: error.message,
-      stack: error.stack,
+      error: err.message,
+      stack: err.stack,
       url: request.url,
       method: request.method,
       ip: request.ip,

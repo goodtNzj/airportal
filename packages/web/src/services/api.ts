@@ -121,7 +121,7 @@ export const transferApi = {
   getContent: async (code: string): Promise<Blob | { contentType: 'text'; textContent: string; expiresAt: string }> => {
     const res = await api.get(`/transfers/${code}`, { responseType: 'blob' });
     const contentType = res.headers['content-type'];
-    if (contentType?.includes('application/json')) {
+    if (typeof contentType === 'string' && contentType.includes('application/json')) {
       const text = await res.data.text();
       return JSON.parse(text).data;
     }

@@ -31,7 +31,7 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
   }
 }
 
-export function optionalAuthMiddleware(request: FastifyRequest, reply: FastifyReply, done: () => void) {
+export function optionalAuthMiddleware(request: FastifyRequest, _reply: FastifyReply, done: () => void) {
   const authHeader = request.headers.authorization;
 
   if (authHeader && authHeader.startsWith('Bearer ')) {

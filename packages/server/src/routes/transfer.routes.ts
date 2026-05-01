@@ -20,7 +20,7 @@ export async function transferRoutes(app: FastifyInstance) {
   });
 
   // 获取配置
-  app.get('/config', async (request, reply) => {
+  app.get('/config', async (_request, reply) => {
     return reply.send({
       success: true,
       data: {

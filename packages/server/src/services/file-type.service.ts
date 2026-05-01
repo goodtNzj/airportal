@@ -1,4 +1,3 @@
-import { config } from '../config/index.js';
 import { logger } from './logger.service.js';
 
 // 常见文件类型的 Magic Number（文件头签名）
@@ -200,7 +199,7 @@ export class FileValidationService {
   /**
    * 检查扩展名与内容是否匹配
    */
-  private checkExtensionMismatch(ext: string, detectedMimeType: string | null, declaredMimeType: string): boolean {
+  private checkExtensionMismatch(ext: string, detectedMimeType: string | null, _declaredMimeType: string): boolean {
     const extToMime: Record<string, string[]> = {
       'jpg': ['image/jpeg'],
       'jpeg': ['image/jpeg'],

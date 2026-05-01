@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { CodeInput } from '../components/CodeInput';
 import { transferApi } from '../services/api';
 import { useStore } from '../stores/useStore';

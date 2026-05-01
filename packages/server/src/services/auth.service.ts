@@ -69,9 +69,8 @@ export class AuthService {
 
   private generateToken(userId: number, username: string): { token: string; user: UserPayload } {
     const config = getConfig();
-    const token = jwt.sign({ userId, username }, config.jwt.secret, {
-      expiresIn: config.jwt.expiresIn,
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const token = jwt.sign({ userId, username }, config.jwt.secret, { expiresIn: config.jwt.expiresIn } as any);
 
     return {
       token,

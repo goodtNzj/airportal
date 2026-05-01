@@ -43,7 +43,7 @@ export async function routes(app: FastifyInstance) {
   }
 
   // 健康检查
-  app.get('/health', async (request, reply) => {
+  app.get('/health', async (_request, reply) => {
     return reply.send({ status: 'ok', timestamp: new Date().toISOString() });
   });
 

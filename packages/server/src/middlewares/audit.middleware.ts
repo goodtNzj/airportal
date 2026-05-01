@@ -45,7 +45,7 @@ function getClientIP(request: FastifyRequest): string {
 /**
  * 审计日志中间件
  */
-export function auditMiddleware(request: FastifyRequest, reply: FastifyReply, done: HookHandlerDoneFunction) {
+export function auditMiddleware(request: FastifyRequest, reply: FastifyReply, done: HookHandlerDoneFunction): void {
   const config = getConfig();
   const startTime = Date.now();
   const clientIP = getClientIP(request);
@@ -57,10 +57,12 @@ export function auditMiddleware(request: FastifyRequest, reply: FastifyReply, do
       path: request.url,
       method: request.method,
     });
-    return reply.status(403).send({
+    reply.status(403).send({
       success: false,
       error: { code: 'IP_BLOCKED', message: '访问被拒绝' },
     });
+    done();
+    return;
   }
 
   // 记录请求
@@ -133,7 +135,7 @@ export async function ipBlacklistRoutes(app: FastifyInstance) {
         timeWindow: 60000,
       },
     },
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     return reply.send({
       success: true,
       data: ipBlacklistService.getStats(),
@@ -147,7 +149,7 @@ export async function ipBlacklistRoutes(app: FastifyInstance) {
         timeWindow: 60000,
       },
     },
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     return reply.send({
       success: true,
       data: ipBlacklistService.getBlockedIPs(),
