@@ -67,20 +67,20 @@ install_nodejs() {
         fi
     fi
 
-    log_step "安装 Node.js 18.x..."
+    log_step "安装 Node.js 20.x..."
 
     case $OS in
         ubuntu|debian)
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
             sudo apt install -y nodejs
             ;;
         centos|rhel|rocky|almalinux)
-            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
             sudo yum install -y nodejs
             ;;
         *)
             log_error "不支持的操作系统: $OS"
-            log_error "请手动安装 Node.js 18+"
+            log_error "请手动安装 Node.js 20+"
             exit 1
             ;;
     esac
@@ -245,9 +245,9 @@ After=network.target
 [Service]
 Type=simple
 User=$USER
-WorkingDirectory=$INSTALL_DIR/packages/server
+WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$INSTALL_DIR/packages/server/.env
-ExecStart=/usr/bin/node dist/index.js
+ExecStart=$(which pnpm) start
 Restart=on-failure
 RestartSec=10
 
@@ -271,9 +271,8 @@ start_service() {
     pm2 delete airportal 2>/dev/null || true
     sudo systemctl stop airportal 2>/dev/null || true
 
-    # 使用 PM2 启动
-    cd packages/server
-    pm2 start dist/index.js --name airportal
+    # 使用 PM2 启动 (在 monorepo 根目录执行 pnpm start)
+    pm2 start pnpm --name airportal -- start
 
     # 保存 PM2 配置
     pm2 save
