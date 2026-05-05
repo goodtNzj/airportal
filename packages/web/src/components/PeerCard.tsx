@@ -4,9 +4,10 @@ interface PeerCardProps {
   peer: PeerInfo;
   onSendFile: () => void;
   disabled?: boolean;
+  source?: 'subnet' | 'room';
 }
 
-export function PeerCard({ peer, onSendFile, disabled }: PeerCardProps) {
+export function PeerCard({ peer, onSendFile, disabled, source }: PeerCardProps) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between">
@@ -30,13 +31,25 @@ export function PeerCard({ peer, onSendFile, disabled }: PeerCardProps) {
           {/* Device Info */}
           <div>
             <h3 className="font-medium text-slate-800">{peer.deviceName}</h3>
-            <div className="flex items-center gap-1 text-xs text-slate-400">
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                peer.status === 'available' ? 'bg-green-500' : 'bg-yellow-500'
-              }`} />
-              <span>
-                {peer.status === 'available' ? '在线' : '传输中'}
-              </span>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <div className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  peer.status === 'available' ? 'bg-green-500' : 'bg-yellow-500'
+                }`} />
+                <span>
+                  {peer.status === 'available' ? '在线' : '传输中'}
+                </span>
+              </div>
+              {source === 'room' && (
+                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">
+                  房间
+                </span>
+              )}
+              {source === 'subnet' && (
+                <span className="px-1.5 py-0.5 bg-green-100 text-green-600 rounded text-xs">
+                  局域网
+                </span>
+              )}
             </div>
           </div>
         </div>

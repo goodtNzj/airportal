@@ -1,12 +1,15 @@
+/// <reference types="@fastify/websocket" />
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import websocket from '@fastify/websocket';
 import type { WebSocket } from 'ws';
 import { discoveryService } from '../services/discovery.service.js';
 import { signalingService } from '../services/signaling.service.js';
+import { roomService } from '../services/room.service.js';
 import { logger } from '../services/logger.service.js';
 
 interface WebSocketQuery {
   deviceName?: string;
+  roomId?: string;
 }
 
 /**
@@ -61,30 +64,90 @@ export async function p2pRoutes(app: FastifyInstance) {
     (socket: WebSocket, req) => {
       const ip = req.ip;
       const deviceName = getDeviceName(req);
+      const query = req.query as WebSocketQuery;
 
       // Register peer
       const socketId = discoveryService.addPeer(ip, deviceName, socket);
 
-      // Send initial peer list
-      const peers = discoveryService.getLocalPeers(socketId);
+      // Auto-join room if roomId provided in query
+      let currentRoom: { id: string; name?: string } | null = null;
+      if (query.roomId) {
+        const result = roomService.joinRoom(socketId, query.roomId);
+        if (result.success && result.room) {
+          currentRoom = { id: result.room.id, name: result.room.name };
+        }
+      }
+
+      // Send initial peer list (both local subnet and room peers)
+      const localPeers = discoveryService.getLocalPeers(socketId);
+      const roomPeers = roomService.getRoomPeers(socketId);
+
       socket.send(
         JSON.stringify({
           type: 'init',
           socketId,
-          peers: peers.map((p) => ({
+          peers: localPeers.map((p) => ({
             socketId: p.socketId,
             deviceName: p.deviceName,
             status: p.status,
+            source: 'subnet' as const,
+          })),
+          room: currentRoom,
+          roomPeers: roomPeers.map((p) => ({
+            socketId: p.socketId,
+            deviceName: p.deviceName,
+            status: p.status,
+            source: 'room' as const,
           })),
         })
       );
 
-      logger.info('WebSocket connection established', { socketId, ip, deviceName });
+      logger.info('WebSocket connection established', { socketId, ip, deviceName, room: currentRoom?.id });
 
       // Handle incoming messages
       socket.on('message', (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString());
+
+          // Handle room-related messages
+          if (message.type === 'create-room') {
+            const room = roomService.createRoom(socketId, message.name);
+            socket.send(JSON.stringify({
+              type: 'room-created',
+              room: { id: room.id, name: room.name },
+            }));
+            return;
+          }
+
+          if (message.type === 'join-room') {
+            const result = roomService.joinRoom(socketId, message.roomId);
+            if (result.success && result.room) {
+              socket.send(JSON.stringify({
+                type: 'room-joined',
+                room: { id: result.room.id, name: result.room.name },
+                peers: roomService.getRoomPeers(socketId).map((p) => ({
+                  socketId: p.socketId,
+                  deviceName: p.deviceName,
+                  status: p.status,
+                })),
+              }));
+            } else {
+              socket.send(JSON.stringify({
+                type: 'room-error',
+                code: 'JOIN_FAILED',
+                message: result.error || 'Failed to join room',
+              }));
+            }
+            return;
+          }
+
+          if (message.type === 'leave-room') {
+            roomService.leaveRoom(socketId);
+            socket.send(JSON.stringify({ type: 'room-left' }));
+            return;
+          }
+
+          // Forward other messages to signaling service
           signalingService.handleMessage(socketId, message);
         } catch (error) {
           logger.error('Failed to parse WebSocket message', {
@@ -103,6 +166,7 @@ export async function p2pRoutes(app: FastifyInstance) {
 
       // Handle connection close
       socket.on('close', (code: number, reason: Buffer) => {
+        roomService.leaveRoom(socketId);
         discoveryService.removePeer(socketId);
         logger.info('WebSocket connection closed', {
           socketId,
@@ -117,6 +181,7 @@ export async function p2pRoutes(app: FastifyInstance) {
           socketId,
           error: error.message,
         });
+        roomService.leaveRoom(socketId);
         discoveryService.removePeer(socketId);
       });
     }
@@ -127,6 +192,7 @@ export async function p2pRoutes(app: FastifyInstance) {
     return reply.send({
       enabled: true,
       peerCount: discoveryService.getPeerCount(),
+      roomCount: roomService.getRoomCount(),
     });
   });
 }

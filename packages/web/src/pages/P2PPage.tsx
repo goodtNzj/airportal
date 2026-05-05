@@ -8,15 +8,24 @@ export function P2PPage() {
   const {
     isConnected,
     peers,
+    roomPeers,
+    room,
     transfers,
     pendingRequests,
     sendFile,
     acceptTransfer,
     rejectTransfer,
+    createRoom,
+    joinRoom,
+    leaveRoom,
   } = useP2P();
 
   const [selectedPeer, setSelectedPeer] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [joinRoomId, setJoinRoomId] = useState('');
+  const [roomError, setRoomError] = useState<string | null>(null);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,6 +50,40 @@ export function P2PPage() {
   const handleSendClick = (peerId: string) => {
     setSelectedPeer(peerId);
     fileInputRef.current?.click();
+  };
+
+  const handleCreateRoom = async () => {
+    setIsCreatingRoom(true);
+    setRoomError(null);
+    try {
+      await createRoom();
+    } catch (err) {
+      setRoomError(err instanceof Error ? err.message : '创建房间失败');
+    } finally {
+      setIsCreatingRoom(false);
+    }
+  };
+
+  const handleJoinRoom = async () => {
+    if (!joinRoomId.trim()) return;
+    setIsJoiningRoom(true);
+    setRoomError(null);
+    try {
+      await joinRoom(joinRoomId.trim().toUpperCase());
+      setJoinRoomId('');
+    } catch (err) {
+      setRoomError(err instanceof Error ? err.message : '加入房间失败');
+    } finally {
+      setIsJoiningRoom(false);
+    }
+  };
+
+  const handleLeaveRoom = async () => {
+    try {
+      await leaveRoom();
+    } catch (err) {
+      console.error('Failed to leave room:', err);
+    }
   };
 
   const activeRequest = pendingRequests[0];
@@ -87,9 +130,102 @@ export function P2PPage() {
         </div>
       )}
 
+      {/* Room Section */}
+      <section className="mb-8">
+        <h2 className="text-lg font-semibold text-slate-700 mb-4">房间</h2>
+
+        {room ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-700 font-medium">当前房间:</span>
+                  <span className="bg-blue-600 text-white px-3 py-1 rounded-lg font-mono text-lg">
+                    {room.id}
+                  </span>
+                </div>
+                <p className="text-blue-600 text-sm mt-1">
+                  将此房间号分享给其他设备，即可在任意网络下互传文件
+                </p>
+              </div>
+              <button
+                onClick={handleLeaveRoom}
+                className="px-4 py-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+              >
+                离开房间
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-slate-50 rounded-xl p-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="bg-white rounded-lg p-4 border border-slate-200">
+                <h3 className="font-medium text-slate-700 mb-2">创建房间</h3>
+                <p className="text-slate-500 text-sm mb-3">创建一个新房间，分享房间号给其他设备</p>
+                <button
+                  onClick={handleCreateRoom}
+                  disabled={isCreatingRoom || !isConnected}
+                  className="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isCreatingRoom ? '创建中...' : '创建房间'}
+                </button>
+              </div>
+
+              <div className="bg-white rounded-lg p-4 border border-slate-200">
+                <h3 className="font-medium text-slate-700 mb-2">加入房间</h3>
+                <p className="text-slate-500 text-sm mb-3">输入房间号加入已有房间</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={joinRoomId}
+                    onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
+                    placeholder="4位房间号"
+                    maxLength={4}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-center font-mono text-lg uppercase"
+                  />
+                  <button
+                    onClick={handleJoinRoom}
+                    disabled={isJoiningRoom || !isConnected || joinRoomId.length !== 4}
+                    className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isJoiningRoom ? '加入中...' : '加入'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {roomError && (
+              <p className="text-red-500 text-sm mt-3 text-center">{roomError}</p>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Room Peers Section */}
+      {room && roomPeers.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-700 mb-4">
+            房间内的设备
+            <span className="ml-2 text-sm font-normal text-slate-400">({roomPeers.length})</span>
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {roomPeers.map((peer) => (
+              <PeerCard
+                key={peer.socketId}
+                peer={peer}
+                onSendFile={() => handleSendClick(peer.socketId)}
+                disabled={isSending}
+                source="room"
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Subnet Peers Section */}
       <section className="mb-8">
         <h2 className="text-lg font-semibold text-slate-700 mb-4">
-          发现的设备
+          同一局域网的设备
           {peers.length > 0 && (
             <span className="ml-2 text-sm font-normal text-slate-400">({peers.length})</span>
           )}
@@ -112,7 +248,7 @@ export function P2PPage() {
             </svg>
             <p className="text-slate-400">{isConnected ? '暂无其他设备在线' : '请等待连接建立'}</p>
             {isConnected && (
-              <p className="text-slate-400 text-sm mt-1">请确保其他设备也打开了此页面</p>
+              <p className="text-slate-400 text-sm mt-1">请确保其他设备也打开了此页面，或使用房间功能</p>
             )}
           </div>
         ) : (
@@ -123,6 +259,7 @@ export function P2PPage() {
                 peer={peer}
                 onSendFile={() => handleSendClick(peer.socketId)}
                 disabled={isSending}
+                source="subnet"
               />
             ))}
           </div>

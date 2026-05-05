@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { p2pService } from '../services/p2p.service';
 import type {
   PeerInfo,
+  RoomInfo,
   TransferProgress,
   PendingTransfer,
   WSMessage,
   WSPeerListMessage,
+  WSRoomPeerListMessage,
+  WSRoomPeerJoinedMessage,
+  WSRoomPeerLeftMessage,
   WSTransferRequestMessage,
 } from '../types/p2p';
 
@@ -13,17 +17,24 @@ interface UseP2PReturn {
   isConnected: boolean;
   socketId: string | null;
   peers: PeerInfo[];
+  roomPeers: PeerInfo[];
+  room: RoomInfo | null;
   transfers: TransferProgress[];
   pendingRequests: PendingTransfer[];
   sendFile: (peerId: string, file: File) => Promise<string>;
   acceptTransfer: (transferId: string, fromPeerId: string) => void;
   rejectTransfer: (transferId: string, fromPeerId: string) => void;
+  createRoom: (name?: string) => Promise<RoomInfo>;
+  joinRoom: (roomId: string) => Promise<{ room: RoomInfo; peers: PeerInfo[] }>;
+  leaveRoom: () => Promise<void>;
 }
 
 export function useP2P(): UseP2PReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [socketId, setSocketId] = useState<string | null>(null);
   const [peers, setPeers] = useState<PeerInfo[]>([]);
+  const [roomPeers, setRoomPeers] = useState<PeerInfo[]>([]);
+  const [room, setRoom] = useState<RoomInfo | null>(null);
   const [transfers, setTransfers] = useState<TransferProgress[]>([]);
   const [pendingRequests, setPendingRequests] = useState<PendingTransfer[]>([]);
 
@@ -38,6 +49,25 @@ export function useP2P(): UseP2PReturn {
           break;
         case 'peer-list':
           setPeers((message as WSPeerListMessage).peers);
+          break;
+        case 'room-peer-list': {
+          const roomMsg = message as WSRoomPeerListMessage;
+          setRoomPeers(roomMsg.peers);
+          break;
+        }
+        case 'room-peer-joined': {
+          const joinMsg = message as WSRoomPeerJoinedMessage;
+          setRoomPeers((prev) => [...prev, joinMsg.peer]);
+          break;
+        }
+        case 'room-peer-left': {
+          const leftMsg = message as WSRoomPeerLeftMessage;
+          setRoomPeers((prev) => prev.filter((p) => p.socketId !== leftMsg.socketId));
+          break;
+        }
+        case 'room-expired':
+          setRoom(null);
+          setRoomPeers([]);
           break;
         case 'transfer-request': {
           const req = message as WSTransferRequestMessage;
@@ -92,7 +122,8 @@ export function useP2P(): UseP2PReturn {
   }, []);
 
   const sendFile = async (peerId: string, file: File): Promise<string> => {
-    const peerName = peers.find((p) => p.socketId === peerId)?.deviceName || 'Unknown';
+    const allPeers = [...peers, ...roomPeers];
+    const peerName = allPeers.find((p) => p.socketId === peerId)?.deviceName || 'Unknown';
     const placeholderId = `pending-${Date.now()}`;
 
     // Show the transfer immediately so the user sees "connecting" state.
@@ -141,14 +172,38 @@ export function useP2P(): UseP2PReturn {
     setPendingRequests((prev) => prev.filter((r) => r.id !== transferId));
   };
 
+  const createRoom = useCallback(async (name?: string) => {
+    const roomInfo = await p2pService.createRoom(name);
+    setRoom(roomInfo);
+    return roomInfo;
+  }, []);
+
+  const joinRoom = useCallback(async (roomId: string) => {
+    const result = await p2pService.joinRoom(roomId);
+    setRoom(result.room);
+    setRoomPeers(result.peers);
+    return result;
+  }, []);
+
+  const leaveRoom = useCallback(async () => {
+    await p2pService.leaveRoom();
+    setRoom(null);
+    setRoomPeers([]);
+  }, []);
+
   return {
     isConnected,
     socketId,
     peers,
+    roomPeers,
+    room,
     transfers,
     pendingRequests,
     sendFile,
     acceptTransfer,
     rejectTransfer,
+    createRoom,
+    joinRoom,
+    leaveRoom,
   };
 }

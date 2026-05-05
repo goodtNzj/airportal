@@ -2,8 +2,12 @@ import type {
   FileMetadata,
   WSMessage,
   WSInitMessage,
+  WSRoomCreatedMessage,
+  WSRoomJoinedMessage,
   DCFileStart,
   DCFileEnd,
+  RoomInfo,
+  PeerInfo,
 } from '../types/p2p';
 
 type MessageHandler = (message: WSMessage) => void;
@@ -14,6 +18,7 @@ const CHUNK_SIZE = 16384; // 16KB - safe for WebRTC DataChannel
 class P2PService {
   private ws: WebSocket | null = null;
   private socketId: string | null = null;
+  private currentRoom: RoomInfo | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
   private dataChannels: Map<string, RTCDataChannel> = new Map();
   private messageHandlers: Set<MessageHandler> = new Set();
@@ -166,6 +171,90 @@ class P2PService {
   }
 
   /**
+   * Get current room info
+   */
+  getRoom(): RoomInfo | null {
+    return this.currentRoom;
+  }
+
+  /**
+   * Create a new room
+   */
+  createRoom(name?: string): Promise<RoomInfo> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Create room timeout'));
+      }, 10000);
+
+      const handler = (message: WSMessage) => {
+        if (message.type === 'room-created') {
+          clearTimeout(timeout);
+          this.messageHandlers.delete(handler);
+          const roomMsg = message as WSRoomCreatedMessage;
+          this.currentRoom = roomMsg.room;
+          console.log('[P2P] Room created:', roomMsg.room.id);
+          resolve(roomMsg.room);
+        } else if (message.type === 'room-error') {
+          clearTimeout(timeout);
+          this.messageHandlers.delete(handler);
+          reject(new Error((message as unknown as { message: string }).message));
+        }
+      };
+
+      this.messageHandlers.add(handler);
+      this.send({ type: 'create-room', name });
+    });
+  }
+
+  /**
+   * Join an existing room
+   */
+  joinRoom(roomId: string): Promise<{ room: RoomInfo; peers: PeerInfo[] }> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Join room timeout'));
+      }, 10000);
+
+      const handler = (message: WSMessage) => {
+        if (message.type === 'room-joined') {
+          clearTimeout(timeout);
+          this.messageHandlers.delete(handler);
+          const roomMsg = message as WSRoomJoinedMessage;
+          this.currentRoom = roomMsg.room;
+          console.log('[P2P] Joined room:', roomMsg.room.id, 'with', roomMsg.peers.length, 'peers');
+          resolve({ room: roomMsg.room, peers: roomMsg.peers });
+        } else if (message.type === 'room-error') {
+          clearTimeout(timeout);
+          this.messageHandlers.delete(handler);
+          reject(new Error((message as unknown as { message: string }).message));
+        }
+      };
+
+      this.messageHandlers.add(handler);
+      this.send({ type: 'join-room', roomId });
+    });
+  }
+
+  /**
+   * Leave current room
+   */
+  leaveRoom(): Promise<void> {
+    return new Promise((resolve) => {
+      const handler = (message: WSMessage) => {
+        if (message.type === 'room-left') {
+          this.messageHandlers.delete(handler);
+          this.currentRoom = null;
+          console.log('[P2P] Left room');
+          resolve();
+        }
+      };
+
+      this.messageHandlers.add(handler);
+      this.send({ type: 'leave-room' });
+    });
+  }
+
+  /**
    * Handle incoming WebSocket message
    */
   private handleMessage(message: WSMessage): void {
@@ -173,11 +262,21 @@ class P2PService {
       case 'init':
         const initMsg = message as WSInitMessage;
         this.socketId = initMsg.socketId;
+        if (initMsg.room) {
+          this.currentRoom = initMsg.room;
+        }
         console.log('[P2P] Initialized with socket ID:', this.socketId);
         break;
 
       case 'peer-list':
-        // Peer list updated
+        // Peer list updated (subnet peers)
+        break;
+
+      case 'room-peer-list':
+      case 'room-peer-joined':
+      case 'room-peer-left':
+      case 'room-expired':
+        // Room peer updates - handled by useP2P hook
         break;
 
       case 'offer':

@@ -1,4 +1,5 @@
 import { discoveryService } from './discovery.service.js';
+import { roomService } from './room.service.js';
 import { logger } from './logger.service.js';
 
 export interface SignalingMessage {
@@ -47,17 +48,20 @@ class SignalingService {
       return;
     }
 
-    // Verify both peers are in the same subnet
-    if (!discoveryService.areInSameSubnet(message.from, message.to)) {
-      logger.warn('Signaling message between peers in different subnets', {
+    // Verify both peers are in the same subnet OR same room
+    const inSameSubnet = discoveryService.areInSameSubnet(message.from, message.to);
+    const inSameRoom = roomService.areInSameRoom(message.from, message.to);
+
+    if (!inSameSubnet && !inSameRoom) {
+      logger.warn('Signaling message between peers in different subnets and not in same room', {
         from: message.from,
         to: message.to,
       });
       // Send error back to sender
       discoveryService.sendToPeer(message.from, {
         type: 'error',
-        code: 'SUBNET_MISMATCH',
-        message: 'Cannot communicate with peers outside your local network',
+        code: 'PEER_NOT_REACHABLE',
+        message: 'Cannot communicate with this peer - not in same local network or room',
       });
       return;
     }
