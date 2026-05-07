@@ -24,7 +24,12 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/';
+      // 分发自定义事件而非硬跳转，避免破坏 P2P WebSocket 状态
+      window.dispatchEvent(new CustomEvent('auth:logout'));
+      // 仅当用户不在 P2P 页面时进行跳转
+      if (!window.location.pathname.includes('/p2p')) {
+        window.location.href = '/';
+      }
     }
     return Promise.reject(error);
   }
@@ -126,6 +131,24 @@ export const transferApi = {
       return JSON.parse(text).data;
     }
     return res.data;
+  },
+
+  getContentWithFilename: async (code: string): Promise<{ blob: Blob; filename: string } | { contentType: 'text'; textContent: string; expiresAt: string }> => {
+    const res = await api.get(`/transfers/${code}`, { responseType: 'blob' });
+    const contentType = res.headers['content-type'];
+    if (typeof contentType === 'string' && contentType.includes('application/json')) {
+      const text = await res.data.text();
+      return JSON.parse(text).data;
+    }
+    const disposition = res.headers['content-disposition'];
+    let filename = 'download';
+    if (typeof disposition === 'string') {
+      const match = disposition.match(/filename\*=UTF-8''(.+)/);
+      if (match) {
+        filename = decodeURIComponent(match[1]);
+      }
+    }
+    return { blob: res.data as Blob, filename };
   },
 };
 

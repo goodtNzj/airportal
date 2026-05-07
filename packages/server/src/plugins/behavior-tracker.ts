@@ -23,7 +23,7 @@ export class BehaviorTracker implements SecurityPlugin {
   async initialize(): Promise<void> {
     try {
       const config = getConfig();
-      const bConfig = (config.security as any).securityPlugin?.behavior;
+      const bConfig = config.security.securityPlugin?.behavior;
       if (bConfig) {
         this.windowMs = bConfig.windowMs ?? 60_000;
         this.burstThreshold = bConfig.burstThreshold ?? 5;

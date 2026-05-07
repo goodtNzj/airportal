@@ -35,7 +35,7 @@ export class HeuristicScanner implements SecurityPlugin {
   async initialize(): Promise<void> {
     try {
       const config = getConfig();
-      const hConfig = (config.security as any).securityPlugin?.heuristic;
+      const hConfig = config.security.securityPlugin?.heuristic;
       if (hConfig) {
         this.entropyThreshold = hConfig.entropyThreshold ?? 7.5;
         this.maxScanSize = hConfig.maxScanSize ?? 10 * 1024 * 1024;

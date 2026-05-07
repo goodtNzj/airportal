@@ -62,6 +62,9 @@ export class ZipValidationService {
     let pos = actualCdOffset;
     let entriesProcessed = 0;
 
+    // Collect entry offsets so we can verify local headers
+    const entries: { localHeaderOffset: number; compressedSize: number; uncompressedSize: number; compressionMethod: number; fileName: string }[] = [];
+
     for (let i = 0; i < actualTotalEntries && pos + 46 <= buffer.length; i++) {
       const signature = buffer.readUInt32LE(pos);
       if (signature !== this.ZIP_CENTRAL_DIRECTORY) {
@@ -69,11 +72,13 @@ export class ZipValidationService {
         break;
       }
 
+      const compressionMethod = buffer.readUInt16LE(pos + 10);
       const compressedSize = buffer.readUInt32LE(pos + 20);
       const uncompressedSize = buffer.readUInt32LE(pos + 24);
       const fileNameLength = buffer.readUInt16LE(pos + 28);
       const extraFieldLength = buffer.readUInt16LE(pos + 30);
       const commentLength = buffer.readUInt16LE(pos + 32);
+      const localHeaderOffset = buffer.readUInt32LE(pos + 42);
 
       // Validate filename length
       if (fileNameLength > config.maxFileNameLength) {
@@ -102,8 +107,16 @@ export class ZipValidationService {
 
       estimatedCompressed += compressedSize;
       estimatedUncompressed += uncompressedSize;
-      entriesProcessed++;
 
+      entries.push({
+        localHeaderOffset,
+        compressedSize,
+        uncompressedSize,
+        compressionMethod,
+        fileName,
+      });
+
+      entriesProcessed++;
       pos += 46 + fileNameLength + extraFieldLength + commentLength;
     }
 
@@ -112,7 +125,58 @@ export class ZipValidationService {
       return { valid: false, reason: 'ZIP 文件为空或无法解析' };
     }
 
-    // 5. Check uncompressed size limit
+    // 5. Verify local file headers for stored entries to prevent CD size forgery.
+    //    An attacker can set small compressedSize in the CD but store massive data
+    //    in the local file entries. We cross-check: sum of local header sizes must
+    //    not exceed the actual file size, and for stored entries the local header
+    //    size must match the CD size.
+    let verifiedLocalSize = 0;
+    for (const entry of entries) {
+      const lhPos = entry.localHeaderOffset;
+      if (lhPos + 30 > buffer.length) {
+        return { valid: false, reason: 'ZIP 文件结构异常（本地文件头越界）' };
+      }
+
+      const lhSignature = buffer.readUInt32LE(lhPos);
+      if (lhSignature !== this.ZIP_LOCAL_FILE_HEADER) {
+        return { valid: false, reason: 'ZIP 文件本地文件头损坏' };
+      }
+
+      const lhCompressedSize = buffer.readUInt32LE(lhPos + 18);
+      const lhFileNameLength = buffer.readUInt16LE(lhPos + 26);
+      const lhExtraFieldLength = buffer.readUInt16LE(lhPos + 28);
+
+      // For stored (no compression) entries, the local header compressed size
+      // must match the central directory claim
+      if (entry.compressionMethod === 0 && lhCompressedSize !== entry.compressedSize) {
+        return {
+          valid: false,
+          reason: `文件 "${entry.fileName}" 的声明大小与实际大小不一致`,
+        };
+      }
+
+      // Verify that the entry's data range is within the buffer
+      const dataStart = lhPos + 30 + lhFileNameLength + lhExtraFieldLength;
+      const dataEnd = dataStart + lhCompressedSize;
+      if (dataEnd > buffer.length) {
+        return {
+          valid: false,
+          reason: `文件 "${entry.fileName.substring(0, 50)}" 的数据超出缓冲区范围`,
+        };
+      }
+
+      verifiedLocalSize += lhCompressedSize;
+    }
+
+    // Check that the actual data portions fit within the file
+    if (verifiedLocalSize > buffer.length) {
+      return {
+        valid: false,
+        reason: 'ZIP 文件声明大小超出实际文件大小',
+      };
+    }
+
+    // 6. Check uncompressed size limit
     if (estimatedUncompressed > config.maxUncompressedSize) {
       const sizeMB = (estimatedUncompressed / 1024 / 1024).toFixed(1);
       const limitMB = (config.maxUncompressedSize / 1024 / 1024).toFixed(0);
@@ -124,7 +188,7 @@ export class ZipValidationService {
       };
     }
 
-    // 6. Check compression ratio (ZIP bomb detection)
+    // 7. Check compression ratio (ZIP bomb detection)
     if (estimatedCompressed > 0) {
       const ratio = estimatedUncompressed / estimatedCompressed;
       if (ratio > config.maxCompressionRatio) {

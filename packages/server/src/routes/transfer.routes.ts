@@ -7,7 +7,7 @@ import { getConfig } from '../config/index.js';
 import { logger } from '../services/logger.service.js';
 import { ipBlacklistService } from '../services/ip-blacklist.service.js';
 import { pluginManager } from '../plugins/plugin-manager.js';
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 
 export async function transferRoutes(app: FastifyInstance) {
   const config = getConfig();
@@ -118,8 +118,8 @@ export async function transferRoutes(app: FastifyInstance) {
             });
           }
 
-          // 文件类型深度检测（非文件夹上传）
-          if (!isFolderUpload && config.security.fileValidation.enabled) {
+          // 文件类型深度检测
+          if (config.security.fileValidation.enabled) {
             const validation = fileValidationService.validateFile(
               buffer,
               data.mimetype,
@@ -258,6 +258,12 @@ export async function transferRoutes(app: FastifyInstance) {
 
         return reply.send({ success: true, data: result });
       } catch (error) {
+        if (error instanceof ZodError) {
+          return reply.status(400).send({
+            success: false,
+            error: { code: 'VALIDATION_ERROR', message: '输入参数无效' },
+          });
+        }
         const message = error instanceof Error ? error.message : '上传失败';
         logger.error('Upload failed', {
           error: message,

@@ -88,7 +88,7 @@ export async function buildApp() {
     max: config.security.rateLimit.globalMax,
     timeWindow: config.security.rateLimit.globalWindowMs,
     keyGenerator: (request) => {
-      return request.headers['x-forwarded-for']?.toString().split(',')[0] || request.ip;
+      return request.ip;
     },
     errorResponseBuilder: () => ({
       success: false,

@@ -1,13 +1,11 @@
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma.service.js';
 import { CodeService } from './code.service.js';
 import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
 import type { TransferResult, FolderMetadata } from '../types/index.js';
-
-const prisma = new PrismaClient();
 
 export class TransferService {
   private uploadDir: string | null = null;
@@ -60,7 +58,7 @@ export class TransferService {
         textContent,
         expiresAt,
         userId: userId || null,
-        maxDownloads: maxDownloads === 0 ? 999999 : maxDownloads,
+        maxDownloads: maxDownloads === 0 ? -1 : maxDownloads,
         ownerOnly,
       },
     });
@@ -97,12 +95,10 @@ export class TransferService {
     // 磁盘配额检查
     await this.checkDiskQuota(file.data.length);
 
-    // 检查文件扩展名（非文件夹上传）
-    if (!folderMetadata) {
-      const ext = path.extname(file.filename).toLowerCase();
-      if (config.security.upload.blockedExtensions.includes(ext)) {
-        throw new Error('不支持的文件类型');
-      }
+    // 检查文件扩展名
+    const ext = path.extname(file.filename).toLowerCase();
+    if (config.security.upload.blockedExtensions.includes(ext)) {
+      throw new Error('不支持的文件类型');
     }
 
     // ownerOnly 需要登录
@@ -142,7 +138,7 @@ export class TransferService {
         folderName: folderMetadata?.folderName ?? null,
         expiresAt,
         userId: userId || null,
-        maxDownloads: maxDownloads === 0 ? 999999 : maxDownloads,
+        maxDownloads: maxDownloads === 0 ? -1 : maxDownloads,
         ownerOnly,
       },
     });
@@ -192,8 +188,9 @@ export class TransferService {
       if (error instanceof Error && error.message.includes('存储空间不足')) {
         throw error;
       }
-      // Aggregate query failed (e.g., first run) - skip quota check
-      logger.debug('Disk quota check skipped', { error });
+      logger.warn('Disk quota check failed, allowing upload to proceed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -210,7 +207,12 @@ export class TransferService {
 
     if (new Date() > transfer.expiresAt) {
       logger.info('Transfer expired on access', { pickupCode });
-      this.deleteTransfer(transfer.id, transfer.filePath).catch(() => {});
+      this.deleteTransfer(transfer.id, transfer.filePath).catch((err) => {
+        logger.error('Failed to cleanup expired transfer', {
+          pickupCode,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
       throw new Error('取件码已过期');
     }
 
@@ -224,8 +226,8 @@ export class TransferService {
       }
     }
 
-    // maxDownloads=999999 表示不限次数
-    if (transfer.maxDownloads < 999999 && transfer.downloadCount >= transfer.maxDownloads) {
+    // maxDownloads=-1 表示不限次数
+    if (transfer.maxDownloads > 0 && transfer.downloadCount >= transfer.maxDownloads) {
       logger.warn('Max downloads reached', { pickupCode, count: transfer.downloadCount });
       throw new Error('已达到最大下载次数');
     }

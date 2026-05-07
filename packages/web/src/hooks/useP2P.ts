@@ -36,6 +36,12 @@ export function useP2P(): UseP2PReturn {
   const [pendingRequests, setPendingRequests] = useState<PendingTransfer[]>([]);
 
   useEffect(() => {
+    // Listen for auth logout events to clean up P2P connection
+    const handleAuthLogout = () => {
+      p2pService.disconnect();
+    };
+    window.addEventListener('auth:logout', handleAuthLogout);
+
     // Register handlers first so the `init` broadcast isn't missed when
     // connect() resolves after the initial message has already arrived.
     const unsubMessage = p2pService.onMessage((message: WSMessage) => {
@@ -112,6 +118,7 @@ export function useP2P(): UseP2PReturn {
     return () => {
       unsubMessage();
       unsubProgress();
+      window.removeEventListener('auth:logout', handleAuthLogout);
     };
   }, []);
 

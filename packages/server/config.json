@@ -90,5 +90,12 @@
   "log": {
     "level": "info",
     "file": ""
+  },
+  "p2p": {
+    "enabled": true,
+    "maxFileSize": 524288000,
+    "maxConcurrentTransfers": 3,
+    "requestTimeout": 60000,
+    "description": "P2P 直传配置 - 通过房间号实现设备间直接文件传输"
   }
 }

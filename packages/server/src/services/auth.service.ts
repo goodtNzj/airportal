@@ -1,11 +1,9 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma.service.js';
 import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
 import type { UserPayload } from '../types/index.js';
-
-const prisma = new PrismaClient();
 
 export class AuthService {
   async register(username: string, password: string) {
@@ -69,8 +67,7 @@ export class AuthService {
 
   private generateToken(userId: number, username: string): { token: string; user: UserPayload } {
     const config = getConfig();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const token = jwt.sign({ userId, username }, config.jwt.secret, { expiresIn: config.jwt.expiresIn } as any);
+    const token = jwt.sign({ userId, username }, config.jwt.secret, { expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'] });
 
     return {
       token,

@@ -129,12 +129,15 @@ export class FileValidationService {
     const detectedMimeType = this.detectMimeType(buffer);
     const ext = filename.split('.').pop()?.toLowerCase() || '';
 
-    // 检查是否是危险文件类型
-    if (detectedMimeType && DANGEROUS_MIME_TYPES.includes(detectedMimeType)) {
-      logger.warn('Dangerous file detected', { filename, detectedMimeType, declaredMimeType });
+    // 检查是否是危险文件类型（通过 magic bytes 或扩展名）
+    const isDangerousByMagic = detectedMimeType && DANGEROUS_MIME_TYPES.includes(detectedMimeType);
+    const isDangerousByExtension = this.isDangerousExtension(ext);
+
+    if (isDangerousByMagic || (!detectedMimeType && isDangerousByExtension)) {
+      logger.warn('Dangerous file detected', { filename, detectedMimeType, declaredMimeType, ext });
       return {
         valid: false,
-        detectedMimeType,
+        detectedMimeType: detectedMimeType ?? undefined,
         declaredMimeType,
         reason: '检测到危险的文件类型',
         isDangerous: true,
@@ -194,6 +197,14 @@ export class FileValidationService {
     }
 
     return detected === declared;
+  }
+
+  /**
+   * 检查扩展名是否对应危险文件类型
+   */
+  private isDangerousExtension(ext: string): boolean {
+    const dangerousExts = ['exe', 'dll', 'bat', 'cmd', 'sh', 'ps1', 'vbs', 'msi', 'jar', 'elf', 'bin', 'com'];
+    return dangerousExts.includes(ext);
   }
 
   /**

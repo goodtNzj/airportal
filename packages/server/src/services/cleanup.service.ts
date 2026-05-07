@@ -1,13 +1,12 @@
 import cron from 'node-cron';
 import fs from 'fs/promises';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma.service.js';
 import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
 
-const prisma = new PrismaClient();
-
 export class CleanupService {
   private isRunning = false;
+  private intervalTimer: ReturnType<typeof setInterval> | null = null;
 
   start() {
     const config = getConfig();
@@ -15,15 +14,19 @@ export class CleanupService {
     let cronExpression: string;
 
     if (intervalSeconds < 60) {
-      cronExpression = '* * * * *';
-      logger.info(`Cleanup service started`, { interval: `${intervalSeconds}s` });
+      // 使用 setInterval 处理小于 60 秒的间隔
+      this.intervalTimer = setInterval(() => {
+        this.cleanupExpired();
+      }, intervalSeconds * 1000);
+      logger.info(`Cleanup service started`, { interval: `${intervalSeconds}s (setInterval)` });
     } else if (intervalSeconds < 3600) {
       const minutes = Math.floor(intervalSeconds / 60);
       cronExpression = `*/${minutes} * * * *`;
       logger.info(`Cleanup service started`, { interval: `${minutes}m` });
     } else {
-      cronExpression = '0 * * * *';
-      logger.info(`Cleanup service started`, { interval: '1h' });
+      const hours = Math.floor(intervalSeconds / 3600);
+      cronExpression = `0 */${hours} * * *`;
+      logger.info(`Cleanup service started`, { interval: `${hours}h` });
     }
 
     logger.info('Cleanup configuration', {
@@ -39,9 +42,11 @@ export class CleanupService {
     }
 
     // 定时清理
-    cron.schedule(cronExpression, async () => {
-      await this.cleanupExpired();
-    });
+    if (intervalSeconds >= 60) {
+      cron.schedule(cronExpression!, async () => {
+        await this.cleanupExpired();
+      });
+    }
   }
 
   async cleanupExpired() {
@@ -129,6 +134,10 @@ export class CleanupService {
   }
 
   async stop() {
+    if (this.intervalTimer) {
+      clearInterval(this.intervalTimer);
+      this.intervalTimer = null;
+    }
     cron.getTasks().forEach((task) => task.stop());
     logger.info('Cleanup service stopped');
   }

@@ -41,6 +41,17 @@ export async function routes(app: FastifyInstance) {
   // 全局审计中间件
   if (config.security.auditLog.enabled) {
     app.addHook('onRequest', auditMiddleware);
+  } else {
+    // 即使审计日志关闭，也记录基本的 HTTP 请求信息
+    app.addHook('onResponse', (request, reply, done) => {
+      logger.info('Request', {
+        method: request.method,
+        url: request.url,
+        statusCode: reply.statusCode,
+        ip: request.ip,
+      });
+      done();
+    });
   }
 
   // 健康检查

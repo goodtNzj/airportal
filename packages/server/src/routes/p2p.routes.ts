@@ -6,6 +6,8 @@ import { discoveryService } from '../services/discovery.service.js';
 import { signalingService } from '../services/signaling.service.js';
 import { roomService } from '../services/room.service.js';
 import { logger } from '../services/logger.service.js';
+import { ipBlacklistService } from '../services/ip-blacklist.service.js';
+import { getConfig } from '../config/index.js';
 
 interface WebSocketQuery {
   deviceName?: string;
@@ -62,7 +64,14 @@ export async function p2pRoutes(app: FastifyInstance) {
     '/ws',
     { websocket: true },
     (socket: WebSocket, req) => {
+      const config = getConfig();
       const ip = req.ip;
+
+      if (config.security.ipBlacklist.enabled && ipBlacklistService.isBlocked(ip)) {
+        logger.warn('Blocked IP attempted P2P WebSocket connection', { ip });
+        socket.close(4001, 'Access denied');
+        return;
+      }
       const deviceName = getDeviceName(req);
       const query = req.query as WebSocketQuery;
 

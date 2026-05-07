@@ -127,6 +127,8 @@ export function auditMiddleware(request: FastifyRequest, reply: FastifyReply, do
  * IP 黑名单管理路由
  */
 export async function ipBlacklistRoutes(app: FastifyInstance) {
+  const { authMiddleware } = await import('./auth.middleware.js');
+
   // IP 管理端点限流：5 req/min
   app.get('/stats', {
     config: {
@@ -156,7 +158,9 @@ export async function ipBlacklistRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post<{ Body: { ip: string; reason: string; duration?: number } }>('/block', async (request, reply) => {
+  app.post<{ Body: { ip: string; reason: string; duration?: number } }>('/block', {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
     const { ip, reason, duration } = request.body;
 
     if (!ip || !reason) {
@@ -170,7 +174,9 @@ export async function ipBlacklistRoutes(app: FastifyInstance) {
     return reply.send({ success: true, message: 'IP 已封禁' });
   });
 
-  app.delete<{ Body: { ip: string } }>('/unblock', async (request, reply) => {
+  app.delete<{ Body: { ip: string } }>('/unblock', {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
     const { ip } = request.body;
 
     if (!ip) {

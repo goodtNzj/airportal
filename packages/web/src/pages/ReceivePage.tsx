@@ -14,7 +14,7 @@ export function ReceivePage() {
     setError(null);
 
     try {
-      const result = await transferApi.getContent(code);
+      const result = await transferApi.getContentWithFilename(code);
 
       if ('textContent' in result) {
         // 文本内容
@@ -24,10 +24,10 @@ export function ReceivePage() {
       } else {
         // 文件/文件夹下载
         setDownloading(true);
-        const url = URL.createObjectURL(result);
+        const url = URL.createObjectURL(result.blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = '';
+        a.download = result.filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

@@ -19,10 +19,18 @@ export const useStore = create<AppState>()(
       token: null,
       config: null,
       setUser: (user) => set({ user }),
-      setToken: (token) => set({ token }),
+      setToken: (token) => {
+        if (token) {
+          localStorage.setItem('token', token);
+        } else {
+          localStorage.removeItem('token');
+        }
+        set({ token });
+      },
       setConfig: (config) => set({ config }),
       logout: () => {
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         set({ user: null, token: null });
       },
     }),

@@ -24,15 +24,20 @@ class P2PService {
   private messageHandlers: Set<MessageHandler> = new Set();
   private progressHandlers: Set<ProgressHandler> = new Set();
 
-  // File receiving state
+  // File receiving state: maps from "peerId:transferId" to receiving state
   private receivingFiles: Map<
     string,
     {
       metadata: DCFileStart;
       chunks: ArrayBuffer[];
       receivedChunks: number;
+      peerId: string;
     }
   > = new Map();
+
+  private receivingKey(peerId: string, transferId: string): string {
+    return `${peerId}:${transferId}`;
+  }
 
   /**
    * Connect to signaling server (idempotent)
@@ -379,6 +384,7 @@ class P2PService {
     data: ArrayBuffer | string,
     _peerId: string
   ): void {
+    const peerId = _peerId;
     if (typeof data === 'string') {
       // JSON message
       try {
@@ -386,32 +392,32 @@ class P2PService {
 
         if (message.type === 'file-start') {
           const fileStart = message as DCFileStart;
-          this.receivingFiles.set(message.transferId, {
+          this.receivingFiles.set(this.receivingKey(peerId, message.transferId), {
             metadata: fileStart,
             chunks: new Array(fileStart.totalChunks),
             receivedChunks: 0,
+            peerId,
           });
-          console.log(`[P2P] Starting to receive file: ${fileStart.fileName}`);
+          console.log(`[P2P] Starting to receive file: ${fileStart.fileName} from ${peerId}`);
         } else if (message.type === 'file-end') {
-          this.completeFileReceive(message.transferId);
+          this.completeFileReceive(peerId, message.transferId);
         } else if (message.type === 'file-error') {
           console.error(`[P2P] File transfer error:`, message.error);
-          this.receivingFiles.delete(message.transferId);
+          this.receivingFiles.delete(this.receivingKey(peerId, message.transferId));
         }
       } catch (error) {
         console.error('[P2P] Failed to parse DataChannel message:', error);
       }
     } else {
-      // Binary chunk
-      // Find the receiving file for this peer
-      for (const [transferId, receiving] of this.receivingFiles) {
-        if (receiving.chunks[receiving.receivedChunks] === undefined) {
+      // Binary chunk - find the receiving file for this specific peer
+      for (const [receivingKey, receiving] of this.receivingFiles) {
+        if (receivingKey.startsWith(peerId + ':') && receiving.chunks[receiving.receivedChunks] === undefined) {
           receiving.chunks[receiving.receivedChunks] = data;
           receiving.receivedChunks++;
 
           // Report progress
           const progress = (receiving.receivedChunks / receiving.metadata.totalChunks) * 100;
-          this.progressHandlers.forEach((handler) => handler(transferId, progress));
+          this.progressHandlers.forEach((handler) => handler(receiving.metadata.transferId, progress));
 
           // Check if complete (will be handled by file-end message)
           break;
@@ -423,8 +429,9 @@ class P2PService {
   /**
    * Complete file receive and trigger download
    */
-  private completeFileReceive(transferId: string): void {
-    const receiving = this.receivingFiles.get(transferId);
+  private completeFileReceive(peerId: string, transferId: string): void {
+    const key = this.receivingKey(peerId, transferId);
+    const receiving = this.receivingFiles.get(key);
     if (!receiving) {
       console.error(`[P2P] No receiving file found for transfer ${transferId}`);
       return;
@@ -448,7 +455,7 @@ class P2PService {
     console.log(`[P2P] File received and downloaded: ${metadata.fileName}`);
 
     // Cleanup
-    this.receivingFiles.delete(transferId);
+    this.receivingFiles.delete(key);
   }
 
   /**
