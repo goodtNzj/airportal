@@ -36,12 +36,12 @@ export function TransferRequestModal({ request, onAccept, onReject }: TransferRe
   }, [request.expiresAt, onReject]);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-black/[0.06]">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-12 h-12 bg-[#f0eee6] rounded-xl flex items-center justify-center">
+            <svg className="w-6 h-6 text-[#d97757]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -51,18 +51,18 @@ export function TransferRequestModal({ request, onAccept, onReject }: TransferRe
             </svg>
           </div>
           <div>
-            <h3 className="font-semibold text-slate-800">文件传输请求</h3>
-            <p className="text-sm text-slate-500">
+            <h3 className="font-semibold text-[#141413]">文件传输请求</h3>
+            <p className="text-sm text-[#73726c]">
               来自: {request.fromPeer?.deviceName || '未知设备'}
             </p>
           </div>
         </div>
 
         {/* File Info */}
-        <div className="bg-slate-50 rounded-xl p-4 mb-4">
+        <div className="bg-[#f0eee6] rounded-xl p-4 mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-black/[0.06]">
+              <svg className="w-5 h-5 text-[#73726c]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -72,14 +72,14 @@ export function TransferRequestModal({ request, onAccept, onReject }: TransferRe
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-slate-800 truncate">{request.fileName}</p>
-              <p className="text-sm text-slate-500">{formatFileSize(request.fileSize)}</p>
+              <p className="font-medium text-[#141413] truncate">{request.fileName}</p>
+              <p className="text-sm text-[#73726c]">{formatFileSize(request.fileSize)}</p>
             </div>
           </div>
         </div>
 
         {/* Timer */}
-        <div className="flex items-center justify-center gap-1 text-sm text-slate-400 mb-4">
+        <div className="flex items-center justify-center gap-1.5 text-sm text-[#91908a] mb-5">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
@@ -95,13 +95,13 @@ export function TransferRequestModal({ request, onAccept, onReject }: TransferRe
         <div className="flex gap-3">
           <button
             onClick={onReject}
-            className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors"
+            className="flex-1 px-4 py-3 border border-black/10 text-[#3d3d3a] rounded-xl hover:bg-black/[0.04] transition-colors"
           >
             拒绝
           </button>
           <button
             onClick={onAccept}
-            className="flex-1 px-4 py-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors"
+            className="flex-1 px-4 py-3 bg-[#c6613f] text-white rounded-xl hover:bg-[#d97757] transition-colors font-medium"
           >
             接收
           </button>

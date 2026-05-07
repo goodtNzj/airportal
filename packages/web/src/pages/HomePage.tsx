@@ -17,14 +17,14 @@ export function HomePage() {
             />
           </svg>
         </div>
-        <h1 className="text-4xl font-bold text-slate-800 mb-2">AirPortal</h1>
-        <p className="text-slate-500">简单安全的跨设备文件传输</p>
+        <h1 className="text-4xl font-bold text-[#141413] mb-2">AirPortal</h1>
+        <p className="text-[#73726c]">简单安全的跨设备文件传输</p>
       </div>
 
       <div className="flex justify-center gap-4 mb-6 flex-wrap">
         <Link
           to="/send"
-          className="px-8 py-4 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors flex items-center gap-2"
+          className="px-8 py-4 bg-[#c6613f] text-white rounded-xl hover:bg-[#d97757] transition-colors flex items-center gap-2 font-medium"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -33,7 +33,7 @@ export function HomePage() {
         </Link>
         <Link
           to="/receive"
-          className="px-8 py-4 bg-white text-primary-500 border border-primary-500 rounded-xl hover:bg-primary-50 transition-colors flex items-center gap-2"
+          className="px-8 py-4 bg-white text-[#d97757] border border-black/10 rounded-xl hover:bg-black/[0.04] transition-colors flex items-center gap-2 font-medium"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -46,7 +46,7 @@ export function HomePage() {
       <div className="mb-8">
         <Link
           to="/p2p"
-          className="inline-flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-[#c6613f] text-white rounded-xl hover:bg-[#d97757] transition-colors font-medium"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -58,10 +58,10 @@ export function HomePage() {
           </svg>
           P2P 直传
         </Link>
-        <p className="text-sm text-slate-400 mt-2">通过房间号实现设备间直接传输，无需经过服务器</p>
+        <p className="text-sm text-[#91908a] mt-2">通过房间号实现设备间直接传输，无需经过服务器</p>
       </div>
 
-      <div className="text-sm text-slate-400 space-y-1">
+      <div className="text-sm text-[#91908a] space-y-1">
         <p>无需登录即可使用</p>
         {user && <p>登录后可查看传输历史</p>}
       </div>

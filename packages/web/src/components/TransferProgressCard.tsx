@@ -29,15 +29,15 @@ function getStatusText(status: TransferProgress['status']): string {
 function getStatusColor(status: TransferProgress['status']): string {
   switch (status) {
     case 'connecting':
-      return 'text-yellow-600';
+      return 'text-amber-600';
     case 'transferring':
       return 'text-blue-600';
     case 'completed':
-      return 'text-green-600';
+      return 'text-emerald-600';
     case 'failed':
-      return 'text-red-600';
+      return 'text-red-500';
     default:
-      return 'text-slate-600';
+      return 'text-[#73726c]';
   }
 }
 
@@ -47,16 +47,16 @@ export function TransferProgressCard({ transfer }: TransferProgressCardProps) {
   const isInProgress = transfer.status === 'transferring' || transfer.status === 'connecting';
 
   return (
-    <div className={`bg-white rounded-xl border p-4 ${
-      isFailed ? 'border-red-200' : isCompleted ? 'border-green-200' : 'border-slate-200'
+    <div className={`bg-white rounded-xl border p-4 shadow-sm ${
+      isFailed ? 'border-red-200' : isCompleted ? 'border-emerald-200' : 'border-black/[0.06]'
     }`}>
       <div className="flex items-center gap-3">
         {/* Direction Icon */}
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-          transfer.direction === 'sending' ? 'bg-blue-100' : 'bg-green-100'
+          transfer.direction === 'sending' ? 'bg-[#f0eee6]' : 'bg-emerald-50'
         }`}>
           {transfer.direction === 'sending' ? (
-            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-[#d97757]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -65,7 +65,7 @@ export function TransferProgressCard({ transfer }: TransferProgressCardProps) {
               />
             </svg>
           ) : (
-            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -79,7 +79,7 @@ export function TransferProgressCard({ transfer }: TransferProgressCardProps) {
         {/* File Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
-            <p className="font-medium text-slate-800 truncate">{transfer.fileName}</p>
+            <p className="font-medium text-[#141413] truncate">{transfer.fileName}</p>
             <span className={`text-sm ${getStatusColor(transfer.status)}`}>
               {getStatusText(transfer.status)}
             </span>
@@ -87,16 +87,16 @@ export function TransferProgressCard({ transfer }: TransferProgressCardProps) {
 
           {/* Progress Bar */}
           {isInProgress && (
-            <div className="w-full bg-slate-100 rounded-full h-2 mb-1">
+            <div className="w-full bg-[#f0eee6] rounded-full h-2 mb-1">
               <div
-                className="bg-primary-500 h-2 rounded-full transition-all duration-300"
+                className="bg-[#d97757] h-2 rounded-full transition-all duration-300"
                 style={{ width: `${transfer.percentage}%` }}
               />
             </div>
           )}
 
           {/* Size Info */}
-          <div className="flex items-center gap-2 text-xs text-slate-400">
+          <div className="flex items-center gap-2 text-xs text-[#73726c]">
             <span>
               {isInProgress
                 ? `${formatFileSize(transfer.bytesTransferred)} / ${formatFileSize(transfer.fileSize)}`
@@ -115,15 +115,15 @@ export function TransferProgressCard({ transfer }: TransferProgressCardProps) {
 
         {/* Status Icon */}
         {isCompleted && (
-          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-8 h-8 bg-emerald-50 rounded-full flex items-center justify-center">
+            <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
         )}
         {isFailed && (
-          <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-            <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-8 h-8 bg-red-50 rounded-full flex items-center justify-center">
+            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>

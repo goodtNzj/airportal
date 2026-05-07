@@ -9,15 +9,15 @@ interface PeerCardProps {
 
 export function PeerCard({ peer, onSendFile, disabled, source }: PeerCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-xl border border-black/[0.06] p-4 hover:border-black/10 hover:shadow-sm transition-all">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* Device Icon */}
           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-            peer.status === 'available' ? 'bg-green-100' : 'bg-yellow-100'
+            peer.status === 'available' ? 'bg-emerald-50' : 'bg-amber-50'
           }`}>
             <svg className={`w-5 h-5 ${
-              peer.status === 'available' ? 'text-green-600' : 'text-yellow-600'
+              peer.status === 'available' ? 'text-emerald-600' : 'text-amber-600'
             }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -30,18 +30,18 @@ export function PeerCard({ peer, onSendFile, disabled, source }: PeerCardProps) 
 
           {/* Device Info */}
           <div>
-            <h3 className="font-medium text-slate-800">{peer.deviceName}</h3>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
+            <h3 className="font-medium text-[#141413]">{peer.deviceName}</h3>
+            <div className="flex items-center gap-2 text-xs">
               <div className="flex items-center gap-1">
                 <span className={`w-1.5 h-1.5 rounded-full ${
-                  peer.status === 'available' ? 'bg-green-500' : 'bg-yellow-500'
+                  peer.status === 'available' ? 'bg-emerald-500' : 'bg-amber-500'
                 }`} />
-                <span>
+                <span className="text-[#73726c]">
                   {peer.status === 'available' ? '在线' : '传输中'}
                 </span>
               </div>
               {source === 'room' && (
-                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">
+                <span className="px-1.5 py-0.5 bg-[#f0eee6] text-[#73726c] rounded text-xs">
                   房间
                 </span>
               )}
@@ -53,7 +53,7 @@ export function PeerCard({ peer, onSendFile, disabled, source }: PeerCardProps) 
         <button
           onClick={onSendFile}
           disabled={disabled || peer.status !== 'available'}
-          className="px-4 py-2 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+          className="px-4 py-2 bg-[#c6613f] text-white text-sm rounded-lg hover:bg-[#d97757] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1 font-medium"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path

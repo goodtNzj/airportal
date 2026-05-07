@@ -12,11 +12,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <header className="bg-white shadow-sm">
+    <div className="min-h-screen bg-[#f0eee6]">
+      <header className="bg-white border-b border-black/5">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-[#d97757] rounded-lg flex items-center justify-center">
               <svg
                 className="w-5 h-5 text-white"
                 fill="none"
@@ -31,21 +31,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 />
               </svg>
             </div>
-            <span className="text-xl font-bold text-slate-800">AirPortal</span>
+            <span className="text-xl font-bold text-[#141413]">AirPortal</span>
           </Link>
           <div className="flex items-center gap-4">
             {user ? (
               <>
-                <span className="text-sm text-slate-600">你好, {user.username}</span>
+                <span className="text-sm text-[#3d3d3a]">你好, {user.username}</span>
                 <button
                   onClick={handleLogout}
-                  className="text-sm text-slate-500 hover:text-slate-700"
+                  className="text-sm text-[#73726c] hover:text-[#141413]"
                 >
                   退出
                 </button>
               </>
             ) : (
-              <Link to="/login" className="text-sm text-primary-600 hover:text-primary-700">
+              <Link to="/login" className="text-sm text-[#d97757] hover:text-[#c6613f]">
                 登录
               </Link>
             )}
@@ -53,7 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="max-w-4xl mx-auto px-4 py-8">{children}</main>
-      <footer className="text-center py-6 text-sm text-slate-500">
+      <footer className="text-center py-6 text-sm text-[#91908a]">
         <p>AirPortal - 简单安全的文件传输</p>
       </footer>
     </div>
