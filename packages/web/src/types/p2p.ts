@@ -4,7 +4,7 @@ export interface PeerInfo {
   socketId: string;
   deviceName: string;
   status: 'available' | 'transferring';
-  source?: 'subnet' | 'room';
+  source?: 'room';
 }
 
 export interface RoomInfo {
@@ -43,7 +43,6 @@ export interface FileMetadata {
 // WebSocket message types
 export type WSMessageType =
   | 'init'
-  | 'peer-list'
   | 'room-created'
   | 'room-joined'
   | 'room-left'
@@ -69,7 +68,6 @@ export interface WSMessage {
 export interface WSInitMessage extends WSMessage {
   type: 'init';
   socketId: string;
-  peers: PeerInfo[];
   room?: RoomInfo;
   roomPeers?: PeerInfo[];
 }
@@ -101,11 +99,6 @@ export interface WSRoomPeerLeftMessage extends WSMessage {
   type: 'room-peer-left';
   roomId: string;
   socketId: string;
-}
-
-export interface WSPeerListMessage extends WSMessage {
-  type: 'peer-list';
-  peers: PeerInfo[];
 }
 
 export interface WSTransferRequestMessage extends WSMessage {

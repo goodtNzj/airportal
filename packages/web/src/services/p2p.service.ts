@@ -268,10 +268,6 @@ class P2PService {
         console.log('[P2P] Initialized with socket ID:', this.socketId);
         break;
 
-      case 'peer-list':
-        // Peer list updated (subnet peers)
-        break;
-
       case 'room-peer-list':
       case 'room-peer-joined':
       case 'room-peer-left':

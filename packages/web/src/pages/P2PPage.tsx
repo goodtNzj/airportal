@@ -7,7 +7,6 @@ import { useP2P } from '../hooks/useP2P';
 export function P2PPage() {
   const {
     isConnected,
-    peers,
     roomPeers,
     room,
     transfers,
@@ -101,9 +100,9 @@ export function P2PPage() {
             />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">局域网直传</h1>
+        <h1 className="text-2xl font-bold text-slate-800 mb-2">P2P 直传</h1>
         <p className="text-slate-500 text-sm">
-          {isConnected ? '已连接 · 同一局域网下的设备可以互相发现' : '正在连接...'}
+          {isConnected ? '已连接 · 通过房间号即可互传文件' : '正在连接...'}
         </p>
       </div>
 
@@ -221,50 +220,6 @@ export function P2PPage() {
           </div>
         </section>
       )}
-
-      {/* Subnet Peers Section */}
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold text-slate-700 mb-4">
-          同一局域网的设备
-          {peers.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-slate-400">({peers.length})</span>
-          )}
-        </h2>
-
-        {peers.length === 0 ? (
-          <div className="bg-slate-50 rounded-xl p-8 text-center">
-            <svg
-              className="w-12 h-12 mx-auto text-slate-300 mb-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-            <p className="text-slate-400">{isConnected ? '暂无其他设备在线' : '请等待连接建立'}</p>
-            {isConnected && (
-              <p className="text-slate-400 text-sm mt-1">请确保其他设备也打开了此页面，或使用房间功能</p>
-            )}
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {peers.map((peer) => (
-              <PeerCard
-                key={peer.socketId}
-                peer={peer}
-                onSendFile={() => handleSendClick(peer.socketId)}
-                disabled={isSending}
-                source="subnet"
-              />
-            ))}
-          </div>
-        )}
-      </section>
 
       {transfers.length > 0 && (
         <section className="mb-8">

@@ -4,7 +4,7 @@ interface PeerCardProps {
   peer: PeerInfo;
   onSendFile: () => void;
   disabled?: boolean;
-  source?: 'subnet' | 'room';
+  source?: 'room';
 }
 
 export function PeerCard({ peer, onSendFile, disabled, source }: PeerCardProps) {
@@ -43,11 +43,6 @@ export function PeerCard({ peer, onSendFile, disabled, source }: PeerCardProps) 
               {source === 'room' && (
                 <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">
                   房间
-                </span>
-              )}
-              {source === 'subnet' && (
-                <span className="px-1.5 py-0.5 bg-green-100 text-green-600 rounded text-xs">
-                  局域网
                 </span>
               )}
             </div>

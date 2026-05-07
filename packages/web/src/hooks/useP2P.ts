@@ -6,7 +6,6 @@ import type {
   TransferProgress,
   PendingTransfer,
   WSMessage,
-  WSPeerListMessage,
   WSRoomPeerListMessage,
   WSRoomPeerJoinedMessage,
   WSRoomPeerLeftMessage,
@@ -16,7 +15,6 @@ import type {
 interface UseP2PReturn {
   isConnected: boolean;
   socketId: string | null;
-  peers: PeerInfo[];
   roomPeers: PeerInfo[];
   room: RoomInfo | null;
   transfers: TransferProgress[];
@@ -32,7 +30,6 @@ interface UseP2PReturn {
 export function useP2P(): UseP2PReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [socketId, setSocketId] = useState<string | null>(null);
-  const [peers, setPeers] = useState<PeerInfo[]>([]);
   const [roomPeers, setRoomPeers] = useState<PeerInfo[]>([]);
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [transfers, setTransfers] = useState<TransferProgress[]>([]);
@@ -46,9 +43,6 @@ export function useP2P(): UseP2PReturn {
         case 'init':
           setSocketId(p2pService.getSocketId());
           setIsConnected(true);
-          break;
-        case 'peer-list':
-          setPeers((message as WSPeerListMessage).peers);
           break;
         case 'room-peer-list': {
           const roomMsg = message as WSRoomPeerListMessage;
@@ -122,8 +116,7 @@ export function useP2P(): UseP2PReturn {
   }, []);
 
   const sendFile = async (peerId: string, file: File): Promise<string> => {
-    const allPeers = [...peers, ...roomPeers];
-    const peerName = allPeers.find((p) => p.socketId === peerId)?.deviceName || 'Unknown';
+    const peerName = roomPeers.find((p) => p.socketId === peerId)?.deviceName || 'Unknown';
     const placeholderId = `pending-${Date.now()}`;
 
     // Show the transfer immediately so the user sees "connecting" state.
@@ -194,7 +187,6 @@ export function useP2P(): UseP2PReturn {
   return {
     isConnected,
     socketId,
-    peers,
     roomPeers,
     room,
     transfers,

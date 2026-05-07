@@ -48,20 +48,18 @@ class SignalingService {
       return;
     }
 
-    // Verify both peers are in the same subnet OR same room
-    const inSameSubnet = discoveryService.areInSameSubnet(message.from, message.to);
+    // Verify both peers are in the same room
     const inSameRoom = roomService.areInSameRoom(message.from, message.to);
 
-    if (!inSameSubnet && !inSameRoom) {
-      logger.warn('Signaling message between peers in different subnets and not in same room', {
+    if (!inSameRoom) {
+      logger.warn('Signaling message between peers not in same room', {
         from: message.from,
         to: message.to,
       });
-      // Send error back to sender
       discoveryService.sendToPeer(message.from, {
         type: 'error',
         code: 'PEER_NOT_REACHABLE',
-        message: 'Cannot communicate with this peer - not in same local network or room',
+        message: 'Cannot communicate with this peer - not in the same room',
       });
       return;
     }

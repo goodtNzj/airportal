@@ -56,9 +56,9 @@ export function HomePage() {
               d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"
             />
           </svg>
-          局域网直传
+          P2P 直传
         </Link>
-        <p className="text-sm text-slate-400 mt-2">同一局域网下设备直接传输，无需经过服务器</p>
+        <p className="text-sm text-slate-400 mt-2">通过房间号实现设备间直接传输，无需经过服务器</p>
       </div>
 
       <div className="text-sm text-slate-400 space-y-1">

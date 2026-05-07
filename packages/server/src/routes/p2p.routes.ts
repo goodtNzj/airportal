@@ -78,20 +78,13 @@ export async function p2pRoutes(app: FastifyInstance) {
         }
       }
 
-      // Send initial peer list (both local subnet and room peers)
-      const localPeers = discoveryService.getLocalPeers(socketId);
+      // Send initial peer list (room peers only)
       const roomPeers = roomService.getRoomPeers(socketId);
 
       socket.send(
         JSON.stringify({
           type: 'init',
           socketId,
-          peers: localPeers.map((p) => ({
-            socketId: p.socketId,
-            deviceName: p.deviceName,
-            status: p.status,
-            source: 'subnet' as const,
-          })),
           room: currentRoom,
           roomPeers: roomPeers.map((p) => ({
             socketId: p.socketId,

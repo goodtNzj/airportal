@@ -96,6 +96,6 @@
     "maxFileSize": 524288000,
     "maxConcurrentTransfers": 3,
     "requestTimeout": 60000,
-    "description": "P2P局域网直传配置 - 设备发现和直接文件传输"
+    "description": "P2P 直传配置 - 通过房间号实现设备间直接文件传输"
   }
 }
