@@ -297,6 +297,7 @@ export async function transferRoutes(app: FastifyInstance) {
 
     try {
       const transfer = await transferService.getTransfer(code.toUpperCase(), userId);
+      await transferService.incrementDownloadCount(transfer.id);
 
       if (transfer.contentType === 'text') {
         return reply.send({
@@ -312,8 +313,6 @@ export async function transferRoutes(app: FastifyInstance) {
       // 文件/文件夹下载
       const fsModule = await import('fs/promises');
       const fileBuffer = await fsModule.readFile(transfer.filePath!);
-
-      await transferService.incrementDownloadCount(transfer.id);
 
       const downloadName = transfer.contentType === 'folder'
         ? `${transfer.folderName || transfer.fileName || 'folder'}.zip`
