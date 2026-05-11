@@ -27,6 +27,7 @@ export interface PendingTransfer {
 class SignalingService {
   private pendingTransfers: Map<string, PendingTransfer> = new Map();
   private requestTimeout: number = 60000; // 60 seconds
+  private maxPendingTransfers = 500;
 
   /**
    * Generate a unique transfer ID
@@ -127,6 +128,17 @@ class SignalingService {
     }
 
     const transferId = this.generateTransferId();
+
+    // Reject if too many pending transfers
+    if (this.pendingTransfers.size >= this.maxPendingTransfers) {
+      logger.warn('Too many pending transfers, rejecting', { from: message.from });
+      discoveryService.sendToPeer(message.from, {
+        type: 'error',
+        code: 'SERVER_BUSY',
+        message: 'Too many pending transfers, try again later',
+      });
+      return;
+    }
 
     // Create pending transfer
     const pendingTransfer: PendingTransfer = {

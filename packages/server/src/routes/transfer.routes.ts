@@ -296,8 +296,7 @@ export async function transferRoutes(app: FastifyInstance) {
     }
 
     try {
-      const transfer = await transferService.getTransfer(code.toUpperCase(), userId);
-      await transferService.incrementDownloadCount(transfer.id);
+      const transfer = await transferService.getTransferAndClaimDownload(code.toUpperCase(), userId);
 
       if (transfer.contentType === 'text') {
         return reply.send({

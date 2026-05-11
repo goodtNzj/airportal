@@ -40,11 +40,6 @@ export class TransferService {
       throw new Error(`文本长度超过限制（最大 ${config.security.upload.maxTextLength} 字符）`);
     }
 
-    // ownerOnly 需要登录
-    if (ownerOnly && !userId) {
-      throw new Error('仅限创建者领取功能需要登录');
-    }
-
     // 限制有效期
     const actualExpiry = Math.min(expiresIn, config.transfer.maxExpiry);
     const expiresAt = new Date(Date.now() + actualExpiry * 1000);
@@ -101,11 +96,6 @@ export class TransferService {
       throw new Error('不支持的文件类型');
     }
 
-    // ownerOnly 需要登录
-    if (ownerOnly && !userId) {
-      throw new Error('仅限创建者领取功能需要登录');
-    }
-
     const pickupCode = await this.generateUniqueCode();
     const safeFileName = this.generateSafeFileName(file.filename);
     const filePath = path.join(this.uploadDir!, `${pickupCode}_${safeFileName}`);
@@ -117,8 +107,17 @@ export class TransferService {
       throw new Error('文件路径验证失败');
     }
 
-    // 保存文件
-    await fs.writeFile(filePath, file.data);
+    // Stream file to disk in chunks to reduce peak memory
+    const writeStream = (await import('fs')).createWriteStream(resolvedPath);
+    await new Promise<void>((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+      const CHUNK = 1024 * 1024; // 1MB chunks
+      for (let offset = 0; offset < file.data.length; offset += CHUNK) {
+        writeStream.write(file.data.subarray(offset, Math.min(offset + CHUNK, file.data.length)));
+      }
+      writeStream.end();
+    });
 
     // 限制有效期
     const actualExpiry = Math.min(expiresIn, config.transfer.maxExpiry);
@@ -194,7 +193,7 @@ export class TransferService {
     }
   }
 
-  async getTransfer(pickupCode: string, requestUserId?: number) {
+  async getTransferAndClaimDownload(pickupCode: string, requestUserId?: number) {
     const transfer = await prisma.transfer.findUnique({
       where: { pickupCode },
       include: { user: { select: { username: true } } },
@@ -226,19 +225,44 @@ export class TransferService {
       }
     }
 
-    // maxDownloads=-1 表示不限次数
+    // maxDownloads=-1 表示不限次数，原子递增避免并发超限
     if (transfer.maxDownloads > 0 && transfer.downloadCount >= transfer.maxDownloads) {
       logger.warn('Max downloads reached', { pickupCode, count: transfer.downloadCount });
       throw new Error('已达到最大下载次数');
     }
 
+    if (transfer.maxDownloads > 0) {
+      const updated = await prisma.transfer.updateMany({
+        where: {
+          id: transfer.id,
+          downloadCount: { lt: transfer.maxDownloads },
+        },
+        data: { downloadCount: { increment: 1 } },
+      });
+      if (updated.count === 0) {
+        logger.warn('Concurrent download exceeded max', { pickupCode, maxDownloads: transfer.maxDownloads });
+        throw new Error('已达到最大下载次数');
+      }
+    } else {
+      await prisma.transfer.update({
+        where: { id: transfer.id },
+        data: { downloadCount: { increment: 1 } },
+      });
+    }
+
+    // Re-fetch to get the updated downloadCount
+    const refreshed = await prisma.transfer.findUnique({
+      where: { id: transfer.id },
+      include: { user: { select: { username: true } } },
+    });
+
     logger.info('Transfer accessed', {
       pickupCode,
       contentType: transfer.contentType,
-      downloadCount: transfer.downloadCount + 1,
+      downloadCount: refreshed?.downloadCount ?? transfer.downloadCount + 1,
     });
 
-    return transfer;
+    return refreshed ?? transfer;
   }
 
   async incrementDownloadCount(id: number) {

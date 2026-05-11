@@ -168,6 +168,9 @@ NODE_ENV=production
 PORT=3000
 HOST=0.0.0.0
 
+# 反向代理：若部署在 Nginx/Caddy 后方请设为 true
+TRUST_PROXY=false
+
 # 数据库
 DATABASE_URL=file:./data/airportal.db
 EOF

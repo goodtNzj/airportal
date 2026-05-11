@@ -35,6 +35,9 @@ class P2PService {
     }
   > = new Map();
 
+  // Track the most recent active receiving transfer per peer for binary chunk routing
+  private activeReceivingByPeer: Map<string, string> = new Map(); // peerId -> receivingKey
+
   private receivingKey(peerId: string, transferId: string): string {
     return `${peerId}:${transferId}`;
   }
@@ -185,7 +188,7 @@ class P2PService {
   /**
    * Create a new room
    */
-  createRoom(name?: string): Promise<RoomInfo> {
+  createRoom(name?: string, expirySeconds?: number): Promise<RoomInfo> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Create room timeout'));
@@ -207,7 +210,7 @@ class P2PService {
       };
 
       this.messageHandlers.add(handler);
-      this.send({ type: 'create-room', name });
+      this.send({ type: 'create-room', name, expirySeconds });
     });
   }
 
@@ -392,14 +395,17 @@ class P2PService {
 
         if (message.type === 'file-start') {
           const fileStart = message as DCFileStart;
-          this.receivingFiles.set(this.receivingKey(peerId, message.transferId), {
+          const key = this.receivingKey(peerId, message.transferId);
+          this.receivingFiles.set(key, {
             metadata: fileStart,
             chunks: new Array(fileStart.totalChunks),
             receivedChunks: 0,
             peerId,
           });
+          this.activeReceivingByPeer.set(peerId, key);
           console.log(`[P2P] Starting to receive file: ${fileStart.fileName} from ${peerId}`);
         } else if (message.type === 'file-end') {
+          this.activeReceivingByPeer.delete(peerId);
           this.completeFileReceive(peerId, message.transferId);
         } else if (message.type === 'file-error') {
           console.error(`[P2P] File transfer error:`, message.error);
@@ -409,20 +415,28 @@ class P2PService {
         console.error('[P2P] Failed to parse DataChannel message:', error);
       }
     } else {
-      // Binary chunk - find the receiving file for this specific peer
-      for (const [receivingKey, receiving] of this.receivingFiles) {
-        if (receivingKey.startsWith(peerId + ':') && receiving.chunks[receiving.receivedChunks] === undefined) {
-          receiving.chunks[receiving.receivedChunks] = data;
-          receiving.receivedChunks++;
-
-          // Report progress
-          const progress = (receiving.receivedChunks / receiving.metadata.totalChunks) * 100;
-          this.progressHandlers.forEach((handler) => handler(receiving.metadata.transferId, progress));
-
-          // Check if complete (will be handled by file-end message)
-          break;
-        }
+      // Binary chunk - route to the active receiving transfer for this peer
+      const activeKey = this.activeReceivingByPeer.get(peerId);
+      if (!activeKey) {
+        console.warn(`[P2P] Received binary chunk with no active transfer for peer ${peerId}`);
+        return;
       }
+      const receiving = this.receivingFiles.get(activeKey);
+      if (!receiving) {
+        console.warn(`[P2P] Active receiving entry missing for key ${activeKey}`);
+        this.activeReceivingByPeer.delete(peerId);
+        return;
+      }
+      if (receiving.receivedChunks >= receiving.metadata.totalChunks) {
+        console.warn(`[P2P] Received more chunks than expected for ${receiving.metadata.fileName}`);
+        return;
+      }
+      receiving.chunks[receiving.receivedChunks] = data;
+      receiving.receivedChunks++;
+
+      // Report progress
+      const progress = (receiving.receivedChunks / receiving.metadata.totalChunks) * 100;
+      this.progressHandlers.forEach((handler) => handler(receiving.metadata.transferId, progress));
     }
   }
 

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { logger } from './logger.service.js';
 import { discoveryService, type PeerInfo } from './discovery.service.js';
 
@@ -7,12 +8,12 @@ export interface Room {
   createdAt: Date;
   createdBy: string;
   peers: Set<string>; // socketIds
+  expirySeconds: number;
 }
 
 class RoomService {
   private rooms: Map<string, Room> = new Map();
   private peerRooms: Map<string, string> = new Map(); // socketId -> roomId
-  private roomTimeout: number = 24 * 60 * 60 * 1000; // 24 hours
 
   /**
    * Generate a short room code (4 characters, easy to share)
@@ -21,7 +22,7 @@ class RoomService {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude confusing chars: 0O1I
     let code = '';
     for (let i = 0; i < 4; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+      code += chars[crypto.randomInt(chars.length)];
     }
     return code;
   }
@@ -29,7 +30,7 @@ class RoomService {
   /**
    * Create a new room
    */
-  createRoom(creatorSocketId: string, name?: string): Room {
+  createRoom(creatorSocketId: string, name?: string, expirySeconds: number = 1800): Room {
     // Leave existing room first
     this.leaveRoom(creatorSocketId);
 
@@ -45,6 +46,7 @@ class RoomService {
       createdAt: new Date(),
       createdBy: creatorSocketId,
       peers: new Set([creatorSocketId]),
+      expirySeconds: Math.max(60, Math.min(expirySeconds, 86400)),
     };
 
     this.rooms.set(roomId, room);
@@ -210,10 +212,11 @@ class RoomService {
    * Set room expiry timeout
    */
   private setRoomExpiry(roomId: string): void {
+    const room = this.rooms.get(roomId);
+    const timeoutMs = (room?.expirySeconds ?? 1800) * 1000;
     setTimeout(() => {
       const room = this.rooms.get(roomId);
       if (room) {
-        // Notify all peers that room is expired
         for (const peerId of room.peers) {
           discoveryService.sendToPeer(peerId, {
             type: 'room-expired',
@@ -224,7 +227,7 @@ class RoomService {
         this.rooms.delete(roomId);
         logger.info('Room expired', { roomId });
       }
-    }, this.roomTimeout);
+    }, timeoutMs);
   }
 
   /**

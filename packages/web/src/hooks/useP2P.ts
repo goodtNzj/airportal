@@ -22,7 +22,7 @@ interface UseP2PReturn {
   sendFile: (peerId: string, file: File) => Promise<string>;
   acceptTransfer: (transferId: string, fromPeerId: string) => void;
   rejectTransfer: (transferId: string, fromPeerId: string) => void;
-  createRoom: (name?: string) => Promise<RoomInfo>;
+  createRoom: (name?: string, expirySeconds?: number) => Promise<RoomInfo>;
   joinRoom: (roomId: string) => Promise<{ room: RoomInfo; peers: PeerInfo[] }>;
   leaveRoom: () => Promise<void>;
 }
@@ -172,8 +172,8 @@ export function useP2P(): UseP2PReturn {
     setPendingRequests((prev) => prev.filter((r) => r.id !== transferId));
   };
 
-  const createRoom = useCallback(async (name?: string) => {
-    const roomInfo = await p2pService.createRoom(name);
+  const createRoom = useCallback(async (name?: string, expirySeconds?: number) => {
+    const roomInfo = await p2pService.createRoom(name, expirySeconds);
     setRoom(roomInfo);
     return roomInfo;
   }, []);

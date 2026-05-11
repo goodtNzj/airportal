@@ -72,6 +72,15 @@ export async function p2pRoutes(app: FastifyInstance) {
         socket.close(4001, 'Access denied');
         return;
       }
+
+      // Connection limit check
+      const connCheck = discoveryService.canAcceptConnection(ip);
+      if (!connCheck.allowed) {
+        logger.warn('P2P connection rejected', { ip, reason: connCheck.reason });
+        socket.close(4003, connCheck.reason || 'Connection limit reached');
+        return;
+      }
+
       const deviceName = getDeviceName(req);
       const query = req.query as WebSocketQuery;
 
@@ -113,7 +122,7 @@ export async function p2pRoutes(app: FastifyInstance) {
 
           // Handle room-related messages
           if (message.type === 'create-room') {
-            const room = roomService.createRoom(socketId, message.name);
+            const room = roomService.createRoom(socketId, message.name, message.expirySeconds);
             socket.send(JSON.stringify({
               type: 'room-created',
               room: { id: room.id, name: room.name },

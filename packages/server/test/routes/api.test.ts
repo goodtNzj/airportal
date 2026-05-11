@@ -114,16 +114,15 @@ vi.mock('../../src/services/transfer.service.js', () => ({
       expiresAt: new Date(Date.now() + 180000),
       expiresIn: 180,
     }),
-    getTransfer: vi.fn().mockResolvedValue({
+    getTransferAndClaimDownload: vi.fn().mockResolvedValue({
       id: 1,
       pickupCode: 'ABC123',
       contentType: 'text',
       textContent: 'Hello World',
       expiresAt: new Date(Date.now() + 180000),
-      downloadCount: 0,
+      downloadCount: 1,
       maxDownloads: 1,
     }),
-    incrementDownloadCount: vi.fn(),
     getUserHistory: vi.fn().mockResolvedValue([]),
   },
 }));

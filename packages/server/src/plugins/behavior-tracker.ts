@@ -14,6 +14,7 @@ export class BehaviorTracker implements SecurityPlugin {
   version = '1.0.0';
 
   private ipRecords = new Map<string, IPRecord>();
+  private maxIpRecords = 10_000;
   private windowMs = 60_000; // sliding window
   private burstThreshold = 5; // uploads per window
   private sizeMultiplierThreshold = 3; // size outlier if >3x baseline
@@ -42,6 +43,9 @@ export class BehaviorTracker implements SecurityPlugin {
     }
 
     this.cleanStaleRecords();
+    if (this.ipRecords.size >= this.maxIpRecords) {
+      return this.cleanResult();
+    }
     const record = this.getOrCreateRecord(ip);
     const now = Date.now();
 
@@ -121,7 +125,13 @@ export class BehaviorTracker implements SecurityPlugin {
   private cleanStaleRecords(): void {
     const cutoff = Date.now() - this.cleanWindowMs;
     for (const [ip, record] of this.ipRecords) {
-      if (record.timestamps.length === 0 || record.timestamps[record.timestamps.length - 1] < cutoff) {
+      // Clean records with no timestamps, or whose last activity is too old
+      const lastActivity = record.timestamps.length > 0
+        ? record.timestamps[record.timestamps.length - 1]
+        : record.uploadCount > 0
+          ? undefined // was created but never had timestamps pushed — stale
+          : 0;
+      if (lastActivity === undefined || lastActivity < cutoff) {
         this.ipRecords.delete(ip);
       }
     }

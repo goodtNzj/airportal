@@ -21,7 +21,7 @@ export async function buildApp() {
 
   const app = Fastify({
     logger: false,
-    trustProxy: true,
+    trustProxy: process.env.TRUST_PROXY === 'true',
   });
 
   // 安全中间件

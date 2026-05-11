@@ -25,6 +25,7 @@ export function P2PPage() {
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const [roomExpiry, setRoomExpiry] = useState(1800);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,7 +56,7 @@ export function P2PPage() {
     setIsCreatingRoom(true);
     setRoomError(null);
     try {
-      await createRoom();
+      await createRoom(undefined, roomExpiry);
     } catch (err) {
       setRoomError(err instanceof Error ? err.message : '创建房间失败');
     } finally {
@@ -144,6 +145,21 @@ export function P2PPage() {
                 <div className="bg-white rounded-xl p-5 border border-black/[0.06] shadow-sm">
                   <h3 className="font-medium text-[#141413] mb-2">创建房间</h3>
                   <p className="text-[#73726c] text-sm mb-4">创建一个新房间，分享房间号给其他设备</p>
+                  <div className="mb-4">
+                    <label className="text-sm text-[#73726c]">房间有效期:</label>
+                    <select
+                      value={roomExpiry}
+                      onChange={(e) => setRoomExpiry(Number(e.target.value))}
+                      className="ml-2 border border-black/10 rounded-lg px-2 py-1 text-sm text-[#141413] bg-[#f0eee6]"
+                    >
+                      <option value={60}>1 分钟</option>
+                      <option value={180}>3 分钟</option>
+                      <option value={300}>5 分钟</option>
+                      <option value={600}>10 分钟</option>
+                      <option value={1800}>30 分钟</option>
+                      <option value={3600}>1 小时</option>
+                    </select>
+                  </div>
                   <button
                     onClick={handleCreateRoom}
                     disabled={isCreatingRoom || !isConnected}
