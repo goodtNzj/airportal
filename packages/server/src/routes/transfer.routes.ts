@@ -70,11 +70,13 @@ export async function transferRoutes(app: FastifyInstance) {
           const isFolderUpload = request.query.type === 'folder';
           const folderName = request.query.folderName || 'folder';
           const fileCount = parseInt(request.query.fileCount || '0') || 0;
-          const expiresIn = Math.min(
-            parseInt(request.query.expiresIn || '') || config.transfer.defaultExpiry,
+          const expiresInRaw = parseInt(request.query.expiresIn || '');
+          const expiresIn = Math.max(1, Math.min(
+            isNaN(expiresInRaw) ? config.transfer.defaultExpiry : expiresInRaw,
             config.transfer.maxExpiry
-          );
-          const maxDownloads = parseInt(request.query.maxDownloads || '') || 1;
+          ));
+          const maxDownloadsRaw = parseInt(request.query.maxDownloads || '');
+          const maxDownloads = isNaN(maxDownloadsRaw) ? 1 : Math.min(maxDownloadsRaw, 1000);
           const ownerOnly = request.query.ownerOnly === 'true';
 
           // ownerOnly 需要登录

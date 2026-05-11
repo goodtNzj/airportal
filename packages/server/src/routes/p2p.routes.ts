@@ -73,6 +73,14 @@ export async function p2pRoutes(app: FastifyInstance) {
         return;
       }
 
+      // Origin validation (prevent cross-site WebSocket hijacking)
+      const origin = req.headers.origin;
+      if (origin && config.cors.origins.length > 0 && !config.cors.origins.includes(origin)) {
+        logger.warn('P2P WebSocket rejected: disallowed origin', { origin, ip });
+        socket.close(4001, 'Origin not allowed');
+        return;
+      }
+
       // Connection limit check
       const connCheck = discoveryService.canAcceptConnection(ip);
       if (!connCheck.allowed) {

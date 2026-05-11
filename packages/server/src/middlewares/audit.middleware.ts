@@ -32,12 +32,14 @@ function sanitize(obj: unknown, depth: number = 0): unknown {
  * 获取客户端 IP
  */
 function getClientIP(request: FastifyRequest): string {
-  const forwarded = request.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  if (Array.isArray(forwarded)) {
-    return forwarded[0].trim();
+  if (process.env.TRUST_PROXY === 'true') {
+    const forwarded = request.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') {
+      return forwarded.split(',')[0].trim();
+    }
+    if (Array.isArray(forwarded)) {
+      return forwarded[0].trim();
+    }
   }
   return request.ip;
 }
