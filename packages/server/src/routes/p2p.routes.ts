@@ -75,10 +75,24 @@ export async function p2pRoutes(app: FastifyInstance) {
 
       // Origin validation (prevent cross-site WebSocket hijacking)
       const origin = req.headers.origin;
-      if (origin && config.cors.origins.length > 0 && !config.cors.origins.includes(origin)) {
-        logger.warn('P2P WebSocket rejected: disallowed origin', { origin, ip });
-        socket.close(4001, 'Origin not allowed');
-        return;
+      if (origin) {
+        const allowedOrigins = config.cors.origins;
+        // Allow if origin is in CORS whitelist, or if origin's host matches the request host (same-origin)
+        try {
+          const originHost = new URL(origin).host;
+          const requestHost = req.headers.host;
+          const isSameOrigin = originHost === requestHost;
+          const isWhitelisted = allowedOrigins.includes(origin);
+          if (!isSameOrigin && !isWhitelisted) {
+            logger.warn('P2P WebSocket rejected: disallowed origin', { origin, ip });
+            socket.close(4001, 'Origin not allowed');
+            return;
+          }
+        } catch {
+          logger.warn('P2P WebSocket rejected: invalid origin', { origin, ip });
+          socket.close(4001, 'Invalid origin');
+          return;
+        }
       }
 
       // Connection limit check
