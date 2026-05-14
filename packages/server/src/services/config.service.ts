@@ -388,20 +388,17 @@ export function getConfig(): AppConfig {
 /**
  * Deep merge helper — recursively merges partial updates into the target
  */
-function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
-  const result = { ...target };
+function deepMerge<T>(target: T, source: Partial<T>): T {
+  const result = { ...target } as T;
   for (const key of Object.keys(source) as (keyof T)[]) {
     const sourceVal = source[key];
-    const targetVal = target[key];
+    const targetVal = result[key];
     if (
-      sourceVal && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
-      targetVal && typeof targetVal === 'object' && !Array.isArray(targetVal)
+      sourceVal !== undefined && sourceVal !== null && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
+      targetVal !== undefined && targetVal !== null && typeof targetVal === 'object' && !Array.isArray(sourceVal)
     ) {
-      result[key] = deepMerge(
-        targetVal as Record<string, unknown>,
-        sourceVal as Record<string, unknown>
-      ) as T[keyof T];
-    } else {
+      result[key] = deepMerge(targetVal, sourceVal as Partial<typeof targetVal>) as T[keyof T];
+    } else if (sourceVal !== undefined) {
       result[key] = sourceVal as T[keyof T];
     }
   }

@@ -204,6 +204,18 @@ class IPBlacklistService {
       topFailedIPs,
     };
   }
+
+  shutdown(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+    for (const [, timer] of this.unblockTimers) {
+      clearTimeout(timer);
+    }
+    this.unblockTimers.clear();
+    logger.info('IP blacklist service shutdown');
+  }
 }
 
 export const ipBlacklistService = new IPBlacklistService();
