@@ -35,11 +35,18 @@ export interface SecurityPluginConfig {
   behavior: SecurityPluginBehaviorConfig;
 }
 
+export interface ICEServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
 export interface P2PConfig {
   enabled: boolean;
   maxFileSize: number;
   maxConcurrentTransfers: number;
   requestTimeout: number;
+  iceServers: ICEServer[];
 }
 
 export interface SecurityConfig {
@@ -170,6 +177,64 @@ function getStringArray(envKey: string, fallback: string[]): string[] {
 }
 
 /**
+ * 加载 ICE 服务器配置（STUN + TURN）
+ */
+function loadICEServers(configFile: Partial<AppConfig> | null): ICEServer[] {
+  const servers: ICEServer[] = [];
+
+  // 默认 STUN 服务器
+  const defaultStun = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ];
+
+  // 从环境变量或配置文件加载 STUN
+  const stunUrls = process.env.STUN_URLS
+    ? process.env.STUN_URLS.split(',').map(s => s.trim()).filter(Boolean)
+    : configFile?.p2p?.iceServers
+      ?.filter((s) => s.urls.toString().startsWith('stun:'))
+      ?.map((s) => ({ urls: s.urls }));
+
+  if (stunUrls && stunUrls.length > 0) {
+    for (const url of stunUrls) {
+      servers.push(typeof url === 'string' ? { urls: url } : url as ICEServer);
+    }
+  } else {
+    servers.push(...defaultStun);
+  }
+
+  // 从环境变量加载 TURN（必须提供用户名和密码）
+  const turnUrl = process.env.TURN_URL;
+  const turnUsername = process.env.TURN_USERNAME;
+  const turnCredential = process.env.TURN_CREDENTIAL;
+
+  if (turnUrl && turnUsername && turnCredential) {
+    servers.push({
+      urls: turnUrl,
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  // 从配置文件加载 TURN
+  const configTurn = configFile?.p2p?.iceServers
+    ?.filter((s) => {
+      const urls = s.urls.toString();
+      return urls.startsWith('turn:') || urls.startsWith('turns:');
+    });
+
+  if (configTurn) {
+    for (const server of configTurn) {
+      if (!servers.some((s) => s.urls === server.urls)) {
+        servers.push(server);
+      }
+    }
+  }
+
+  return servers;
+}
+
+/**
  * 初始化配置
  */
 export async function initConfig(): Promise<AppConfig> {
@@ -287,6 +352,7 @@ export async function initConfig(): Promise<AppConfig> {
       maxFileSize: getValue('P2P_MAX_FILE_SIZE', configFile?.p2p?.maxFileSize, 524288000, Number),
       maxConcurrentTransfers: getValue('P2P_MAX_CONCURRENT', configFile?.p2p?.maxConcurrentTransfers, 3, Number),
       requestTimeout: getValue('P2P_REQUEST_TIMEOUT', configFile?.p2p?.requestTimeout, 60000, Number),
+      iceServers: loadICEServers(configFile),
     },
   };
 
@@ -369,6 +435,18 @@ export function validateConfig(config: AppConfig): string[] {
     }
     if (config.p2p.requestTimeout < 1000) {
       errors.push('p2p.requestTimeout 必须至少为 1000ms');
+    }
+    if (!config.p2p.iceServers || config.p2p.iceServers.length === 0) {
+      errors.push('p2p.iceServers 必须至少配置一个 STUN 服务器');
+    }
+    // Validate TURN servers have required credentials
+    for (const server of config.p2p.iceServers) {
+      const urls = server.urls.toString();
+      if (urls.startsWith('turn:') || urls.startsWith('turns:')) {
+        if (!server.username || !server.credential) {
+          errors.push(`p2p.iceServers TURN 服务器 (${urls}) 必须配置 username 和 credential`);
+        }
+      }
     }
   }
 

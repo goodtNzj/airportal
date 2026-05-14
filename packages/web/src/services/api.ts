@@ -147,4 +147,11 @@ export const transferApi = {
   },
 };
 
+export const p2pApi = {
+  getICEServers: async (): Promise<RTCIceServer[]> => {
+    const res = await api.get<{ success: boolean; data: { iceServers: RTCIceServer[] } }>('/p2p/ice-servers');
+    return res.data.data.iceServers;
+  },
+};
+
 export default api;

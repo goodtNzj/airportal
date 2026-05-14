@@ -9,6 +9,7 @@ import type {
   RoomInfo,
   PeerInfo,
 } from '../types/p2p';
+import { p2pApi } from './api';
 
 type MessageHandler = (message: WSMessage) => void;
 type ProgressHandler = (transferId: string, progress: number) => void;
@@ -23,6 +24,7 @@ class P2PService {
   private dataChannels: Map<string, RTCDataChannel> = new Map();
   private messageHandlers: Set<MessageHandler> = new Set();
   private progressHandlers: Set<ProgressHandler> = new Set();
+  private iceServers: RTCIceServer[] = []; // Cached ICE servers
 
   // File receiving state: maps from "peerId:transferId" to receiving state
   private receivingFiles: Map<
@@ -47,6 +49,11 @@ class P2PService {
    */
   connect(url?: string): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Fetch ICE servers config first (if not already cached)
+      this.fetchICEServers().catch((err) => {
+        console.warn('[P2P] Failed to fetch ICE servers, using defaults:', err);
+      });
+
       // Already connected — nothing to do
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         resolve();
@@ -156,6 +163,21 @@ class P2PService {
     // NOTE: don't clear messageHandlers/progressHandlers here — components
     // that re-mount expect their handlers registered via onMessage/onProgress
     // to persist. They are unregistered by the unsubscribe fn returned.
+  }
+
+  /**
+   * Fetch ICE servers configuration from server
+   */
+  private async fetchICEServers(): Promise<void> {
+    if (this.iceServers.length > 0) return; // Already cached
+
+    try {
+      this.iceServers = await p2pApi.getICEServers();
+      console.log('[P2P] ICE servers loaded:', this.iceServers.length);
+    } catch (error) {
+      console.error('[P2P] Failed to fetch ICE servers:', error);
+      // Will use default STUN servers in createPeerConnection
+    }
   }
 
   /**
@@ -343,7 +365,7 @@ class P2PService {
    */
   private createPeerConnection(peerId: string): RTCPeerConnection {
     const pc = new RTCPeerConnection({
-      iceServers: [
+      iceServers: this.iceServers.length > 0 ? this.iceServers : [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
       ],

@@ -245,4 +245,15 @@ export async function p2pRoutes(app: FastifyInstance) {
       roomCount: roomService.getRoomCount(),
     });
   });
+
+  // REST endpoint to get ICE server configuration for WebRTC
+  app.get('/ice-servers', async (_request, reply) => {
+    const config = getConfig();
+    return reply.send({
+      success: true,
+      data: {
+        iceServers: config.p2p.iceServers,
+      },
+    });
+  });
 }
