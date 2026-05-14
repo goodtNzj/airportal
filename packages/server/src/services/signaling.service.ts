@@ -269,19 +269,12 @@ class SignalingService {
     discoveryService.updatePeerStatus(transfer.fromSocketId, 'transferring');
     discoveryService.updatePeerStatus(transfer.toSocketId, 'transferring');
 
-    // Notify sender that transfer was accepted
+    // Notify sender that transfer was accepted (single message with proper fields)
     discoveryService.sendToPeer(transfer.fromSocketId, {
       type: 'transfer-accepted',
       transferId,
-      to: from,
-    });
-
-    // Forward accept to sender (for WebRTC connection initiation)
-    discoveryService.sendToPeer(transfer.fromSocketId, {
-      type: 'transfer-accept',
-      from,
+      from: from,
       to: transfer.fromSocketId,
-      payload: { transferId },
     });
 
     logger.info('Transfer accepted', { transferId, from, to: transfer.fromSocketId });

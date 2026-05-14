@@ -343,7 +343,10 @@ class P2PService {
    */
   private createPeerConnection(peerId: string): RTCPeerConnection {
     const pc = new RTCPeerConnection({
-      iceServers: [], // No STUN/TURN needed for local network
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
     });
 
     pc.onicecandidate = (event) => {
@@ -512,14 +515,13 @@ class P2PService {
     // Return a promise that resolves when accepted
     return new Promise((resolve, reject) => {
       const handler = (message: WSMessage) => {
-        const msgFrom = (message as unknown as { from?: string }).from;
-        if (message.type === 'transfer-accepted' && msgFrom === peerId) {
+        if (message.type === 'transfer-accepted') {
           clearTimeout(timeout);
           this.messageHandlers.delete(handler);
 
           // Create WebRTC connection and start transfer
           this.startTransfer(peerId, file).then(resolve).catch(reject);
-        } else if (message.type === 'transfer-rejected' && msgFrom === peerId) {
+        } else if (message.type === 'transfer-rejected') {
           clearTimeout(timeout);
           this.messageHandlers.delete(handler);
           reject(new Error('Transfer rejected'));
