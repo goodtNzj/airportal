@@ -1,20 +1,13 @@
 import axios from 'axios';
-import type { TransferResult, AuthResult, Config, User, UploadOptions } from '../types';
+import type { TransferResult, Config, User, UserPayload, UploadOptions } from '../types';
+import { useStore } from '../stores/useStore';
 
 const api = axios.create({
   baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
-});
-
-// 请求拦截器：添加 token
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true,
 });
 
 // 响应拦截器：处理错误
@@ -22,11 +15,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      // 分发自定义事件而非硬跳转，避免破坏 P2P WebSocket 状态
+      useStore.getState().logout();
       window.dispatchEvent(new CustomEvent('auth:logout'));
-      // 仅当用户不在 P2P 页面时进行跳转
       if (!window.location.pathname.includes('/p2p')) {
         window.location.href = '/';
       }
@@ -36,20 +26,24 @@ api.interceptors.response.use(
 );
 
 export const authApi = {
-  register: async (username: string, password: string): Promise<AuthResult> => {
-    const res = await api.post<{ success: boolean; data: AuthResult }>('/auth/register', {
+  register: async (username: string, password: string): Promise<{ user: UserPayload }> => {
+    const res = await api.post<{ success: boolean; data: { user: UserPayload } }>('/auth/register', {
       username,
       password,
     });
     return res.data.data;
   },
 
-  login: async (username: string, password: string): Promise<AuthResult> => {
-    const res = await api.post<{ success: boolean; data: AuthResult }>('/auth/login', {
+  login: async (username: string, password: string): Promise<{ user: UserPayload }> => {
+    const res = await api.post<{ success: boolean; data: { user: UserPayload } }>('/auth/login', {
       username,
       password,
     });
     return res.data.data;
+  },
+
+  logout: async (): Promise<void> => {
+    await api.post('/auth/logout');
   },
 
   getMe: async (): Promise<User> => {
@@ -143,7 +137,8 @@ export const transferApi = {
     const disposition = res.headers['content-disposition'];
     let filename = 'download';
     if (typeof disposition === 'string') {
-      const match = disposition.match(/filename\*=UTF-8''(.+)/);
+      const match = disposition.match(/filename\*=UTF-8''(.+)/)
+        || disposition.match(/filename="?([^";\n]+)"?/);
       if (match) {
         filename = decodeURIComponent(match[1]);
       }

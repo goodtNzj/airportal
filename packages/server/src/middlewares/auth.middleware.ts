@@ -8,21 +8,30 @@ declare module 'fastify' {
   }
 }
 
-export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
-  const authHeader = request.headers.authorization;
+const TOKEN_COOKIE = 'token';
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+function extractToken(request: FastifyRequest): string | null {
+  const cookie = request.cookies?.[TOKEN_COOKIE];
+  if (cookie) return cookie;
+
+  const authHeader = request.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  return null;
+}
+
+export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
+  const token = extractToken(request);
+  if (!token) {
     return reply.status(401).send({
       success: false,
       error: { code: 'UNAUTHORIZED', message: '未登录' },
     });
   }
 
-  const token = authHeader.substring(7);
-
   try {
-    const payload = authService.verifyToken(token);
-    request.user = payload;
+    request.user = authService.verifyToken(token);
   } catch {
     return reply.status(401).send({
       success: false,
@@ -32,17 +41,13 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
 }
 
 export function optionalAuthMiddleware(request: FastifyRequest, _reply: FastifyReply, done: () => void) {
-  const authHeader = request.headers.authorization;
-
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
+  const token = extractToken(request);
+  if (token) {
     try {
-      const payload = authService.verifyToken(token);
-      request.user = payload;
+      request.user = authService.verifyToken(token);
     } catch {
       // 忽略错误，允许匿名访问
     }
   }
-
   done();
 }

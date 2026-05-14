@@ -136,6 +136,45 @@ describe('HeuristicScanner', () => {
     });
   });
 
+  describe('binary content detection (latin1)', () => {
+    it('should detect eval pattern in binary data', async () => {
+      // Embed eval in binary-like data (alternating null bytes)
+      const binary = Buffer.alloc(256);
+      binary.write('eval("alert(1)")', 50);
+      const result = await scanner.scanFile(binary, {
+        filename: 'document.pdf',
+        mimetype: 'application/pdf',
+        size: binary.length,
+      });
+      expect(result.reasons.some((r) => r.includes('code_exec'))).toBe(true);
+    });
+
+    it('should detect powershell in binary data', async () => {
+      const binary = Buffer.alloc(512);
+      binary.write('powershell -Command Invoke-Expression', 100);
+      const result = await scanner.scanFile(binary, {
+        filename: 'file.doc',
+        mimetype: 'application/msword',
+        size: binary.length,
+      });
+      expect(result.reasons.some((r) => r.includes('powershell'))).toBe(true);
+    });
+
+    it('should not flag clean binary data', async () => {
+      const binary = Buffer.alloc(1024);
+      for (let i = 0; i < 1024; i++) {
+        binary[i] = i % 256;
+      }
+      const result = await scanner.scanFile(binary, {
+        filename: 'random.bin',
+        mimetype: 'application/octet-stream',
+        size: binary.length,
+      });
+      // No pattern match, entropy may add some risk
+      expect(result.riskScore).toBeLessThan(70);
+    });
+  });
+
   describe('shutdown', () => {
     it('should clear patterns', async () => {
       await scanner.shutdown();

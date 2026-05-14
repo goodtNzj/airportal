@@ -7,11 +7,13 @@ import { signalingService } from '../services/signaling.service.js';
 import { roomService } from '../services/room.service.js';
 import { logger } from '../services/logger.service.js';
 import { ipBlacklistService } from '../services/ip-blacklist.service.js';
+import { authService } from '../services/auth.service.js';
 import { getConfig } from '../config/index.js';
 
 interface WebSocketQuery {
   deviceName?: string;
   roomId?: string;
+  token?: string;
 }
 
 /**
@@ -73,24 +75,41 @@ export async function p2pRoutes(app: FastifyInstance) {
         return;
       }
 
-      // Origin validation (prevent cross-site WebSocket hijacking)
+      // Origin 校验 — 浏览器 WS 连接必带 Origin，缺失则拒绝
       const origin = req.headers.origin;
-      if (origin) {
-        const allowedOrigins = config.cors.origins;
-        // Allow if origin is in CORS whitelist, or if origin's host matches the request host (same-origin)
+      if (!origin) {
+        logger.warn('P2P WebSocket rejected: missing Origin', { ip });
+        socket.close(4001, 'Origin required');
+        return;
+      }
+
+      const allowedOrigins = config.cors.origins;
+      try {
+        const originHost = new URL(origin).host;
+        const requestHost = req.headers.host;
+        const isSameOrigin = originHost === requestHost;
+        const isWhitelisted = allowedOrigins.includes(origin);
+        if (!isSameOrigin && !isWhitelisted) {
+          logger.warn('P2P WebSocket rejected: disallowed origin', { origin, ip });
+          socket.close(4001, 'Origin not allowed');
+          return;
+        }
+      } catch {
+        logger.warn('P2P WebSocket rejected: invalid origin', { origin, ip });
+        socket.close(4001, 'Invalid origin');
+        return;
+      }
+
+      const query = req.query as WebSocketQuery;
+
+      // 可选的 token 认证 — 从 Cookie 或查询参数验证 JWT 有效性
+      const authToken = req.cookies?.token || query.token;
+      if (authToken) {
         try {
-          const originHost = new URL(origin).host;
-          const requestHost = req.headers.host;
-          const isSameOrigin = originHost === requestHost;
-          const isWhitelisted = allowedOrigins.includes(origin);
-          if (!isSameOrigin && !isWhitelisted) {
-            logger.warn('P2P WebSocket rejected: disallowed origin', { origin, ip });
-            socket.close(4001, 'Origin not allowed');
-            return;
-          }
+          authService.verifyToken(authToken);
         } catch {
-          logger.warn('P2P WebSocket rejected: invalid origin', { origin, ip });
-          socket.close(4001, 'Invalid origin');
+          logger.warn('P2P WebSocket rejected: invalid token', { ip });
+          socket.close(4001, 'Invalid token');
           return;
         }
       }
@@ -104,9 +123,7 @@ export async function p2pRoutes(app: FastifyInstance) {
       }
 
       const deviceName = getDeviceName(req);
-      const query = req.query as WebSocketQuery;
 
-      // Register peer
       const socketId = discoveryService.addPeer(ip, deviceName, socket);
 
       // Auto-join room if roomId provided in query

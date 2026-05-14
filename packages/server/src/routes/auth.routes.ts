@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authService } from '../services/auth.service.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
+import { getConfig } from '../config/index.js';
 import { z } from 'zod';
 
 const registerSchema = z.object({
@@ -13,40 +14,58 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const isDev = process.env.NODE_ENV !== 'production';
+
+function setTokenCookie(reply: import('fastify').FastifyReply, token: string) {
+  reply.setCookie('token', token, {
+    path: '/api/',
+    httpOnly: true,
+    secure: !isDev,
+    sameSite: 'strict',
+    maxAge: 7 * 24 * 60 * 60,
+  });
+}
+
+function clearTokenCookie(reply: import('fastify').FastifyReply) {
+  reply.clearCookie('token', { path: '/api/' });
+}
+
 export async function authRoutes(app: FastifyInstance) {
-  // 注册
-  app.post('/register', async (request, reply) => {
+  const config = getConfig();
+
+  app.post('/register', {
+    config: {
+      rateLimit: {
+        max: config.security.rateLimit.authMax,
+        timeWindow: config.security.rateLimit.authWindowMs,
+      },
+    },
+  }, async (request, reply) => {
     const body = registerSchema.parse(request.body);
-
-    try {
-      const result = await authService.register(body.username, body.password);
-      return reply.send({ success: true, data: result });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '注册失败';
-      return reply.status(400).send({
-        success: false,
-        error: { code: 'REGISTER_FAILED', message },
-      });
-    }
+    const { token, user } = await authService.register(body.username, body.password);
+    setTokenCookie(reply, token);
+    return reply.send({ success: true, data: { user } });
   });
 
-  // 登录
-  app.post('/login', async (request, reply) => {
+  app.post('/login', {
+    config: {
+      rateLimit: {
+        max: config.security.rateLimit.authMax,
+        timeWindow: config.security.rateLimit.authWindowMs,
+      },
+    },
+  }, async (request, reply) => {
     const body = loginSchema.parse(request.body);
-
-    try {
-      const result = await authService.login(body.username, body.password);
-      return reply.send({ success: true, data: result });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '登录失败';
-      return reply.status(401).send({
-        success: false,
-        error: { code: 'LOGIN_FAILED', message },
-      });
-    }
+    const { token, user } = await authService.login(body.username, body.password);
+    setTokenCookie(reply, token);
+    return reply.send({ success: true, data: { user } });
   });
 
-  // 获取当前用户信息
+  app.post('/logout', async (_request, reply) => {
+    clearTokenCookie(reply);
+    return reply.send({ success: true, data: null });
+  });
+
   app.get('/me', { preHandler: authMiddleware }, async (request, reply) => {
     const user = await authService.getUserById(request.user!.userId);
     return reply.send({ success: true, data: user });

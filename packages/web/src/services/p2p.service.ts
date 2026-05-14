@@ -150,6 +150,9 @@ class P2PService {
     this.dataChannels.clear();
 
     this.socketId = null;
+    this.currentRoom = null;
+    this.receivingFiles.clear();
+    this.activeReceivingByPeer.clear();
     // NOTE: don't clear messageHandlers/progressHandlers here — components
     // that re-mount expect their handlers registered via onMessage/onProgress
     // to persist. They are unregistered by the unsubscribe fn returned.
@@ -190,10 +193,6 @@ class P2PService {
    */
   createRoom(name?: string, expirySeconds?: number): Promise<RoomInfo> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Create room timeout'));
-      }, 10000);
-
       const handler = (message: WSMessage) => {
         if (message.type === 'room-created') {
           clearTimeout(timeout);
@@ -209,6 +208,11 @@ class P2PService {
         }
       };
 
+      const timeout = setTimeout(() => {
+        this.messageHandlers.delete(handler);
+        reject(new Error('Create room timeout'));
+      }, 10000);
+
       this.messageHandlers.add(handler);
       this.send({ type: 'create-room', name, expirySeconds });
     });
@@ -219,10 +223,6 @@ class P2PService {
    */
   joinRoom(roomId: string): Promise<{ room: RoomInfo; peers: PeerInfo[] }> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Join room timeout'));
-      }, 10000);
-
       const handler = (message: WSMessage) => {
         if (message.type === 'room-joined') {
           clearTimeout(timeout);
@@ -238,6 +238,11 @@ class P2PService {
         }
       };
 
+      const timeout = setTimeout(() => {
+        this.messageHandlers.delete(handler);
+        reject(new Error('Join room timeout'));
+      }, 10000);
+
       this.messageHandlers.add(handler);
       this.send({ type: 'join-room', roomId });
     });
@@ -250,12 +255,19 @@ class P2PService {
     return new Promise((resolve) => {
       const handler = (message: WSMessage) => {
         if (message.type === 'room-left') {
+          clearTimeout(timeout);
           this.messageHandlers.delete(handler);
           this.currentRoom = null;
           console.log('[P2P] Left room');
           resolve();
         }
       };
+
+      const timeout = setTimeout(() => {
+        this.messageHandlers.delete(handler);
+        this.currentRoom = null;
+        resolve();
+      }, 10000);
 
       this.messageHandlers.add(handler);
       this.send({ type: 'leave-room' });
@@ -284,15 +296,18 @@ class P2PService {
         break;
 
       case 'offer':
-        this.handleOffer(message as unknown as { from: string; payload: RTCSessionDescriptionInit });
+        void this.handleOffer(message as unknown as { from: string; payload: RTCSessionDescriptionInit })
+          .catch((e) => console.error('[P2P] Handle offer error:', e));
         break;
 
       case 'answer':
-        this.handleAnswer(message as unknown as { from: string; payload: RTCSessionDescriptionInit });
+        void this.handleAnswer(message as unknown as { from: string; payload: RTCSessionDescriptionInit })
+          .catch((e) => console.error('[P2P] Handle answer error:', e));
         break;
 
       case 'ice-candidate':
-        this.handleIceCandidate(message as unknown as { from: string; payload: RTCIceCandidateInit });
+        void this.handleIceCandidate(message as unknown as { from: string; payload: RTCIceCandidateInit })
+          .catch((e) => console.error('[P2P] Handle ICE candidate error:', e));
         break;
 
       case 'transfer-accepted':
@@ -385,9 +400,8 @@ class P2PService {
    */
   private handleDataChannelMessage(
     data: ArrayBuffer | string,
-    _peerId: string
+    peerId: string
   ): void {
-    const peerId = _peerId;
     if (typeof data === 'string') {
       // JSON message
       try {
@@ -451,7 +465,13 @@ class P2PService {
       return;
     }
 
-    const { metadata, chunks } = receiving;
+    const { metadata, chunks, receivedChunks } = receiving;
+
+    if (receivedChunks !== metadata.totalChunks) {
+      console.error(`[P2P] Incomplete file: ${receivedChunks}/${metadata.totalChunks} chunks received`);
+      this.receivingFiles.delete(key);
+      return;
+    }
 
     // Combine chunks into blob
     const blob = new Blob(chunks, { type: metadata.mimeType });
@@ -464,7 +484,7 @@ class P2PService {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     console.log(`[P2P] File received and downloaded: ${metadata.fileName}`);
 
@@ -491,23 +511,25 @@ class P2PService {
 
     // Return a promise that resolves when accepted
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Transfer request timeout'));
-      }, 60000);
-
       const handler = (message: WSMessage) => {
-        if (message.type === 'transfer-accepted') {
+        const msgFrom = (message as unknown as { from?: string }).from;
+        if (message.type === 'transfer-accepted' && msgFrom === peerId) {
           clearTimeout(timeout);
           this.messageHandlers.delete(handler);
 
           // Create WebRTC connection and start transfer
           this.startTransfer(peerId, file).then(resolve).catch(reject);
-        } else if (message.type === 'transfer-rejected') {
+        } else if (message.type === 'transfer-rejected' && msgFrom === peerId) {
           clearTimeout(timeout);
           this.messageHandlers.delete(handler);
           reject(new Error('Transfer rejected'));
         }
       };
+
+      const timeout = setTimeout(() => {
+        this.messageHandlers.delete(handler);
+        reject(new Error('Transfer request timeout'));
+      }, 60000);
 
       this.messageHandlers.add(handler);
     });

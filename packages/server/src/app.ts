@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
+import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,6 +12,8 @@ import { routes } from './routes/index.js';
 import { transferService } from './services/transfer.service.js';
 import { cleanupService } from './services/cleanup.service.js';
 import { logger } from './services/logger.service.js';
+import { AppError, ErrorCodes } from './services/errors.service.js';
+import { ZodError } from 'zod';
 import { registerViteHook } from './vite-dev.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -73,6 +76,9 @@ export async function buildApp() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
+  // Cookie 解析（HttpOnly JWT）
+  await app.register(cookie);
+
   // 文件上传
   await app.register(multipart, {
     limits: {
@@ -127,8 +133,30 @@ export async function buildApp() {
     });
   });
 
-  // 错误处理
+  // 全局错误处理 — 所有 handler 抛出的错误最终都汇聚于此
   app.setErrorHandler((error, request, reply) => {
+    if (error instanceof ZodError) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: '输入参数无效' },
+      });
+    }
+
+    if (error instanceof AppError) {
+      if (error.statusCode >= 500) {
+        logger.error('Server error', {
+          code: error.code,
+          message: error.message,
+          url: request.url,
+          method: request.method,
+        });
+      }
+      return reply.status(error.statusCode).send({
+        success: false,
+        error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) },
+      });
+    }
+
     const err = error as Error;
     logger.error('Unhandled error', {
       error: err.message,
@@ -140,7 +168,7 @@ export async function buildApp() {
 
     return reply.status(500).send({
       success: false,
-      error: { code: 'INTERNAL_ERROR', message: '服务器内部错误' },
+      error: { code: ErrorCodes.INTERNAL_ERROR, message: '服务器内部错误' },
     });
   });
 

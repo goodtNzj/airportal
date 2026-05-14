@@ -26,6 +26,7 @@ export interface SecurityPluginBehaviorConfig {
   burstThreshold: number;
   sizeMultiplierThreshold: number;
   anomalyScoreThreshold: number;
+  persistPath: string;
 }
 
 export interface SecurityPluginConfig {
@@ -50,6 +51,7 @@ export interface SecurityConfig {
     autoBlockThreshold: number;
     autoBlockWindow: number;
     autoBlockDuration: number;
+    maxIpRecords: number;
     whitelist: string[];
     blacklist: string[];
   };
@@ -61,8 +63,14 @@ export interface SecurityConfig {
     globalWindowMs: number;
     uploadMax: number;
     uploadWindowMs: number;
+    authMax: number;
+    authWindowMs: number;
+    authLockThreshold: number;
+    authLockWindowMs: number;
+    authLockDurationMs: number;
   };
   upload: {
+    dir: string;
     maxFileSize: number;
     maxTextLength: number;
     maxTotalStorage: number;
@@ -93,6 +101,13 @@ export interface AppConfig {
   log: {
     level: string;
     file: string;
+    rotation: {
+      enabled: boolean;
+      interval: number;
+      maxSize: number;
+      maxFiles: number;
+      compress: boolean;
+    };
   };
   database: {
     url: string;
@@ -130,9 +145,6 @@ async function loadConfigFile(): Promise<Partial<AppConfig> | null> {
   return null;
 }
 
-/**
- * 获取配置值：环境变量优先，然后是配置文件，最后是默认值
- */
 function getValue<T>(
   envKey: string,
   configValue: T | undefined,
@@ -144,9 +156,17 @@ function getValue<T>(
     if (parser) {
       return parser(envValue);
     }
-    return envValue as T;
+    return envValue as unknown as T;
   }
   return configValue ?? defaultValue;
+}
+
+function getStringArray(envKey: string, fallback: string[]): string[] {
+  const envValue = process.env[envKey];
+  if (envValue !== undefined) {
+    return envValue.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return fallback;
 }
 
 /**
@@ -179,8 +199,9 @@ export async function initConfig(): Promise<AppConfig> {
         autoBlockThreshold: getValue('IP_AUTO_BLOCK_THRESHOLD', configFile?.security?.ipBlacklist?.autoBlockThreshold, 10, Number),
         autoBlockWindow: getValue('IP_AUTO_BLOCK_WINDOW', configFile?.security?.ipBlacklist?.autoBlockWindow, 60, Number),
         autoBlockDuration: getValue('IP_AUTO_BLOCK_DURATION', configFile?.security?.ipBlacklist?.autoBlockDuration, 3600, Number),
-        whitelist: process.env.IP_WHITELIST?.split(',') ?? configFile?.security?.ipBlacklist?.whitelist ?? ['127.0.0.1', '::1'],
-        blacklist: process.env.IP_BLACKLIST?.split(',') ?? configFile?.security?.ipBlacklist?.blacklist ?? [],
+        maxIpRecords: getValue('IP_MAX_RECORDS', configFile?.security?.ipBlacklist?.maxIpRecords, 10000, Number),
+        whitelist: getStringArray('IP_WHITELIST', configFile?.security?.ipBlacklist?.whitelist ?? ['127.0.0.1', '::1']),
+        blacklist: getStringArray('IP_BLACKLIST', configFile?.security?.ipBlacklist?.blacklist ?? []),
       },
       auditLog: {
         enabled: getValue('AUDIT_LOG', configFile?.security?.auditLog?.enabled, true, (v) => v !== 'false'),
@@ -190,6 +211,11 @@ export async function initConfig(): Promise<AppConfig> {
         globalWindowMs: getValue('RATE_LIMIT_WINDOW', configFile?.security?.rateLimit?.globalWindowMs, 60000, Number),
         uploadMax: getValue('UPLOAD_RATE_MAX', configFile?.security?.rateLimit?.uploadMax, 10, Number),
         uploadWindowMs: getValue('UPLOAD_RATE_WINDOW', configFile?.security?.rateLimit?.uploadWindowMs, 60000, Number),
+        authMax: getValue('AUTH_RATE_MAX', configFile?.security?.rateLimit?.authMax, 5, Number),
+        authWindowMs: getValue('AUTH_RATE_WINDOW', configFile?.security?.rateLimit?.authWindowMs, 60000, Number),
+        authLockThreshold: getValue('AUTH_LOCK_THRESHOLD', configFile?.security?.rateLimit?.authLockThreshold, 5, Number),
+        authLockWindowMs: getValue('AUTH_LOCK_WINDOW', configFile?.security?.rateLimit?.authLockWindowMs, 300000, Number),
+        authLockDurationMs: getValue('AUTH_LOCK_DURATION', configFile?.security?.rateLimit?.authLockDurationMs, 300000, Number),
       },
       securityPlugin: {
         enabled: getValue('SECURITY_PLUGIN_ENABLED', configFile?.security?.securityPlugin?.enabled, true, (v) => v !== 'false'),
@@ -207,9 +233,11 @@ export async function initConfig(): Promise<AppConfig> {
           burstThreshold: getValue('BEHAVIOR_BURST_THRESHOLD', configFile?.security?.securityPlugin?.behavior?.burstThreshold, 5, Number),
           sizeMultiplierThreshold: getValue('BEHAVIOR_SIZE_MULTIPLIER', configFile?.security?.securityPlugin?.behavior?.sizeMultiplierThreshold, 3, Number),
           anomalyScoreThreshold: getValue('BEHAVIOR_ANOMALY_THRESHOLD', configFile?.security?.securityPlugin?.behavior?.anomalyScoreThreshold, 50, Number),
+          persistPath: getValue('BEHAVIOR_PERSIST_PATH', configFile?.security?.securityPlugin?.behavior?.persistPath, ''),
         },
       },
       upload: {
+        dir: getValue('UPLOAD_DIR', configFile?.security?.upload?.dir, 'uploads'),
         maxFileSize: getValue('MAX_FILE_SIZE', configFile?.security?.upload?.maxFileSize, 52428800, Number),
         maxTextLength: getValue('MAX_TEXT_LENGTH', configFile?.security?.upload?.maxTextLength, 10000, Number),
         maxTotalStorage: getValue('MAX_TOTAL_STORAGE', configFile?.security?.upload?.maxTotalStorage, 1073741824, Number),
@@ -241,10 +269,17 @@ export async function initConfig(): Promise<AppConfig> {
     log: {
       level: getValue('LOG_LEVEL', configFile?.log?.level, 'info'),
       file: getValue('LOG_FILE', configFile?.log?.file, ''),
+      rotation: {
+        enabled: getValue('LOG_ROTATION_ENABLED', configFile?.log?.rotation?.enabled, false, (v) => v !== 'false'),
+        interval: getValue('LOG_ROTATION_INTERVAL', configFile?.log?.rotation?.interval, 0, Number),
+        maxSize: getValue('LOG_ROTATION_MAX_SIZE', configFile?.log?.rotation?.maxSize, 10485760, Number),
+        maxFiles: getValue('LOG_ROTATION_MAX_FILES', configFile?.log?.rotation?.maxFiles, 5, Number),
+        compress: getValue('LOG_ROTATION_COMPRESS', configFile?.log?.rotation?.compress, false, (v) => v !== 'false'),
+      },
     },
 
     cors: {
-      origins: process.env.ALLOWED_ORIGINS?.split(',') ?? configFile?.cors?.origins ?? ['http://localhost:3000'],
+      origins: process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) ?? configFile?.cors?.origins ?? ['http://localhost:3000'],
     },
 
     p2p: {
@@ -271,9 +306,7 @@ export function validateConfig(config: AppConfig): string[] {
     errors.push('server.host 不能为空');
   }
   if (!config.jwt.secret || config.jwt.secret === 'dev-secret-change-in-production') {
-    if (process.env.NODE_ENV === 'production') {
-      errors.push('生产环境必须修改 JWT_SECRET');
-    }
+    errors.push('JWT_SECRET 必须修改，不能使用默认值');
   }
   if (!config.jwt.expiresIn) {
     errors.push('jwt.expiresIn 不能为空');
@@ -353,11 +386,34 @@ export function getConfig(): AppConfig {
 }
 
 /**
+ * Deep merge helper — recursively merges partial updates into the target
+ */
+function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
+  const result = { ...target };
+  for (const key of Object.keys(source) as (keyof T)[]) {
+    const sourceVal = source[key];
+    const targetVal = target[key];
+    if (
+      sourceVal && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
+      targetVal && typeof targetVal === 'object' && !Array.isArray(targetVal)
+    ) {
+      result[key] = deepMerge(
+        targetVal as Record<string, unknown>,
+        sourceVal as Record<string, unknown>
+      ) as T[keyof T];
+    } else {
+      result[key] = sourceVal as T[keyof T];
+    }
+  }
+  return result;
+}
+
+/**
  * 运行时更新配置（部分配置支持热更新）
  */
 export function updateConfig(updates: Partial<AppConfig>): void {
   if (!loadedConfig) {
     throw new Error('Config not initialized');
   }
-  loadedConfig = { ...loadedConfig, ...updates };
+  loadedConfig = deepMerge(loadedConfig, updates);
 }

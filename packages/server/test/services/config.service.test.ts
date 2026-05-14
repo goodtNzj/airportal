@@ -80,7 +80,7 @@ describe('ConfigService', () => {
   describe('validateConfig', () => {
     it('should return no errors for valid config', () => {
       const config = getConfig();
-      const errors = validateConfig(config);
+      const errors = validateConfig({ ...config, jwt: { ...config.jwt, secret: 'my-secret' } });
       expect(errors).toEqual([]);
     });
 
@@ -100,6 +100,12 @@ describe('ConfigService', () => {
       const config = getConfig();
       const errors = validateConfig({ ...config, cleanup: { ...config.cleanup, recordAction: 'invalid' as any } });
       expect(errors.some((e) => e.includes('recordAction'))).toBe(true);
+    });
+
+    it('should reject default JWT secret', () => {
+      const config = getConfig();
+      const errors = validateConfig({ ...config, jwt: { ...config.jwt, secret: 'dev-secret-change-in-production' } });
+      expect(errors.some((e) => e.includes('JWT_SECRET'))).toBe(true);
     });
   });
 });

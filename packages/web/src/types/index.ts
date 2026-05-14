@@ -25,9 +25,9 @@ export interface User {
   createdAt: string;
 }
 
-export interface AuthResult {
-  token: string;
-  user: User;
+export interface UserPayload {
+  userId: number;
+  username: string;
 }
 
 export interface Config {

@@ -3,6 +3,7 @@ import { FileUploader } from '../components/FileUploader';
 import { FolderUploader } from '../components/FolderUploader';
 import { TextInput } from '../components/TextInput';
 import { PickupCodeDisplay } from '../components/PickupCodeDisplay';
+import { CardSkeleton } from '../components/LoadingSkeleton';
 import { transferApi } from '../services/api';
 import { useStore } from '../stores/useStore';
 import type { TransferResult } from '../types';
@@ -16,11 +17,15 @@ export function SendPage() {
   const [ownerOnly, setOwnerOnly] = useState(false);
   const [result, setResult] = useState<TransferResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [configLoading, setConfigLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { config, setConfig, user } = useStore();
 
   useEffect(() => {
-    transferApi.getConfig().then(setConfig).catch(console.error);
+    transferApi.getConfig()
+      .then(setConfig)
+      .catch(console.error)
+      .finally(() => setConfigLoading(false));
   }, [setConfig]);
 
   const handleFileUpload = async (file: File) => {
@@ -64,6 +69,18 @@ export function SendPage() {
 
   if (result) {
     return <PickupCodeDisplay result={result} onReset={() => setResult(null)} />;
+  }
+
+  if (configLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <div className="h-9 bg-slate-200 rounded w-48 mx-auto mb-2 animate-pulse" />
+          <div className="h-5 bg-slate-200 rounded w-64 mx-auto animate-pulse" />
+        </div>
+        <CardSkeleton />
+      </div>
+    );
   }
 
   return (

@@ -5,32 +5,33 @@
   },
   "security": {
     "fileValidation": {
-      "enabled": true,
-      "description": "文件类型深度检测（Magic Number 验证）- 检测文件真实类型，防止伪装扩展名攻击"
+      "enabled": true
     },
     "ipBlacklist": {
       "enabled": true,
       "autoBlockThreshold": 10,
       "autoBlockWindow": 60,
       "autoBlockDuration": 3600,
+      "maxIpRecords": 10000,
       "whitelist": ["127.0.0.1", "::1"],
-      "blacklist": [],
-      "description": "IP 黑名单与自动封禁 - 自动封禁频繁失败的请求 IP"
+      "blacklist": []
     },
     "auditLog": {
-      "enabled": true,
-      "description": "请求审计日志 - 记录所有请求的详细信息，用于安全审计"
+      "enabled": true
     },
     "rateLimit": {
       "globalMax": 100,
       "globalWindowMs": 60000,
       "uploadMax": 10,
       "uploadWindowMs": 60000,
-      "description": "请求限流配置 - 防止 DDoS 和滥用"
+      "authMax": 5,
+      "authWindowMs": 60000,
+      "authLockThreshold": 5,
+      "authLockWindowMs": 300000,
+      "authLockDurationMs": 300000
     },
     "securityPlugin": {
       "enabled": true,
-      "description": "启发式安全插件系统 - 启发式扫描 + 行为追踪，可配置启用/禁用",
       "heuristic": {
         "enabled": true,
         "entropyThreshold": 7.5,
@@ -61,6 +62,7 @@
       }
     },
     "upload": {
+      "dir": "uploads",
       "maxFileSize": 52428800,
       "maxTextLength": 10000,
       "maxTotalStorage": 1073741824,
@@ -71,8 +73,7 @@
         "maxCompressionRatio": 100,
         "maxEntries": 10000,
         "maxFileNameLength": 512
-      },
-      "description": "上传限制配置"
+      }
     }
   },
   "transfer": {
@@ -89,13 +90,19 @@
   },
   "log": {
     "level": "info",
-    "file": ""
+    "file": "",
+    "rotation": {
+      "enabled": false,
+      "interval": 0,
+      "maxSize": 10485760,
+      "maxFiles": 5,
+      "compress": false
+    }
   },
   "p2p": {
     "enabled": true,
     "maxFileSize": 524288000,
     "maxConcurrentTransfers": 3,
-    "requestTimeout": 60000,
-    "description": "P2P 直传配置 - 通过房间号实现设备间直接文件传输"
+    "requestTimeout": 60000
   }
 }

@@ -17,6 +17,7 @@ vi.mock('../../src/services/config.service.js', () => ({
           burstThreshold: 5,
           sizeMultiplierThreshold: 3,
           anomalyScoreThreshold: 50,
+          persistPath: '',
         },
       },
     },
@@ -29,6 +30,10 @@ describe('BehaviorTracker', () => {
   beforeEach(async () => {
     tracker = new BehaviorTracker();
     await tracker.initialize();
+  });
+
+  afterEach(async () => {
+    await tracker.shutdown();
   });
 
   describe('scanFile', () => {
@@ -129,6 +134,29 @@ describe('BehaviorTracker', () => {
     });
   });
 
+  describe('evictOldest', () => {
+    it('should evict the least recently active IP when at capacity', async () => {
+      const ip1 = '10.0.0.1';
+      const ip2 = '10.0.0.2';
+
+      await tracker.scanFile(Buffer.from('a'), { filename: 'a.txt', mimetype: 'text/plain', size: 1, ip: ip1 });
+      await tracker.scanFile(Buffer.from('b'), { filename: 'b.txt', mimetype: 'text/plain', size: 1, ip: ip2 });
+
+      // Force maxIpRecords to 1 so next call triggers eviction
+      (tracker as any).maxIpRecords = 1;
+
+      // This should evict the oldest (ip1)
+      await tracker.scanFile(Buffer.from('c'), { filename: 'c.txt', mimetype: 'text/plain', size: 1, ip: '10.0.0.3' });
+
+      // ip1 should no longer have a record (evicted)
+      const r1 = await tracker.scanFile(Buffer.from('d'), { filename: 'd.txt', mimetype: 'text/plain', size: 1, ip: ip1 });
+      // Fresh record means uploadCount starts at 1
+      expect((r1.details as any)?.uploadCount).toBe(1);
+
+      (tracker as any).maxIpRecords = 10_000;
+    });
+  });
+
   describe('shutdown', () => {
     it('should clear IP records', async () => {
       await tracker.scanFile(Buffer.from('test'), {
@@ -140,7 +168,6 @@ describe('BehaviorTracker', () => {
 
       await tracker.shutdown();
 
-      // After shutdown, stats should reset
       const result = await tracker.scanFile(Buffer.from('test'), {
         filename: 'test.txt',
         mimetype: 'text/plain',
@@ -148,7 +175,7 @@ describe('BehaviorTracker', () => {
         ip: '1.2.3.4',
       });
 
-      expect(result.details?.uploadCount).toBe(1); // reset counter
+      expect(result.details?.uploadCount).toBe(1);
     });
   });
 });

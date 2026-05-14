@@ -29,28 +29,12 @@ function sanitize(obj: unknown, depth: number = 0): unknown {
 }
 
 /**
- * 获取客户端 IP
- */
-function getClientIP(request: FastifyRequest): string {
-  if (process.env.TRUST_PROXY === 'true') {
-    const forwarded = request.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string') {
-      return forwarded.split(',')[0].trim();
-    }
-    if (Array.isArray(forwarded)) {
-      return forwarded[0].trim();
-    }
-  }
-  return request.ip;
-}
-
-/**
- * 审计日志中间件
+ * 审计日志中间件 — 使用 Fastify request.ip（trustProxy 配置由 app.ts 统一控制）
  */
 export function auditMiddleware(request: FastifyRequest, reply: FastifyReply, done: HookHandlerDoneFunction): void {
   const config = getConfig();
   const startTime = Date.now();
-  const clientIP = getClientIP(request);
+  const clientIP = request.ip;
 
   // 检查 IP 是否被封禁
   if (config.security.ipBlacklist.enabled && ipBlacklistService.isBlocked(clientIP)) {
@@ -114,7 +98,8 @@ export function auditMiddleware(request: FastifyRequest, reply: FastifyReply, do
       logger.error('Request failed', responseAudit);
     } else if (statusCode >= 400) {
       logger.warn('Request error', responseAudit);
-      if (config.security.ipBlacklist.enabled) {
+      // Only count 401/403 as failed IP attempts (not 404/400/etc which cause false positives)
+      if (config.security.ipBlacklist.enabled && (statusCode === 401 || statusCode === 403)) {
         ipBlacklistService.recordFailedAttempt(clientIP, `HTTP ${statusCode}`);
       }
     } else {
@@ -133,6 +118,7 @@ export async function ipBlacklistRoutes(app: FastifyInstance) {
 
   // IP 管理端点限流：5 req/min
   app.get('/stats', {
+    preHandler: authMiddleware,
     config: {
       rateLimit: {
         max: 5,
@@ -147,6 +133,7 @@ export async function ipBlacklistRoutes(app: FastifyInstance) {
   });
 
   app.get('/blocked', {
+    preHandler: authMiddleware,
     config: {
       rateLimit: {
         max: 5,

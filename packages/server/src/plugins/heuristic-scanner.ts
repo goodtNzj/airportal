@@ -5,6 +5,7 @@ interface HeuristicPattern {
   name: string;
   regex: string;
   weight: number;
+  compiled?: RegExp;
 }
 
 const DEFAULT_PATTERNS: HeuristicPattern[] = [
@@ -18,7 +19,7 @@ const DEFAULT_PATTERNS: HeuristicPattern[] = [
   { name: 'destructive_cmd', regex: '(rm\\s+-rf|del\\s+/f|format\\s+c:)', weight: 50 },
   { name: 'base64_decode', regex: '(base64_decode|atob\\s*\\(|fromCharCode)', weight: 25 },
   { name: 'wget_curl_pipe', regex: '((wget|curl)\\s+.*\\|\\s*(sh|bash))', weight: 45 },
-  { name: 'reverse_shell', regex: '(nc\\s+-[e|l]|/dev/tcp|bash\\s+-i\\s+>&)', weight: 50 },
+  { name: 'reverse_shell', regex: '(nc\\s+-[el]|/dev/tcp|bash\\s+-i\\s+>&)', weight: 50 },
   { name: 'obfuscation', regex: '(unescape\\s*\\(|String\\.fromCharCode|decodeURIComponent)', weight: 20 },
 ];
 
@@ -41,8 +42,9 @@ export class HeuristicScanner implements SecurityPlugin {
         this.maxScanSize = hConfig.maxScanSize ?? 10 * 1024 * 1024;
         this.rejectThreshold = hConfig.rejectRiskThreshold ?? 70;
         this.warnThreshold = hConfig.warnRiskThreshold ?? 40;
-        if (hConfig.patterns && Array.isArray(hConfig.patterns)) {
-          this.patterns = hConfig.patterns;
+        if (hConfig.patterns && Array.isArray(hConfig.patterns) && hConfig.patterns.length > 0) {
+          // Custom patterns supplement defaults rather than replacing them
+          this.patterns = [...DEFAULT_PATTERNS, ...hConfig.patterns];
         }
       }
     } catch {
@@ -51,6 +53,14 @@ export class HeuristicScanner implements SecurityPlugin {
     if (this.patterns.length === 0) {
       this.patterns = DEFAULT_PATTERNS;
     }
+    // Pre-compile regex patterns
+    for (const pattern of this.patterns) {
+      try {
+        pattern.compiled = new RegExp(pattern.regex, 'im');
+      } catch {
+        // Skip invalid regex patterns
+      }
+    }
   }
 
   async scanFile(buffer: Buffer, metadata: FileMetadata): Promise<ScanResult> {
@@ -58,34 +68,30 @@ export class HeuristicScanner implements SecurityPlugin {
     let riskScore = 0;
 
     // Entropy analysis (only for files up to maxScanSize)
+    let entropy = 0;
     if (buffer.length <= this.maxScanSize) {
-      const entropy = this.calculateEntropy(buffer);
+      entropy = this.calculateEntropy(buffer);
       if (entropy > this.entropyThreshold) {
         riskScore += Math.min(50, Math.round((entropy - this.entropyThreshold) * 20));
         reasons.push(`高信息熵 (${entropy.toFixed(2)})，文件可能被加密或混淆`);
       }
     }
 
-    // Pattern matching (only scan first maxScanSize bytes)
-    const scanSlice = buffer.subarray(0, Math.min(buffer.length, this.maxScanSize));
-    try {
-      const textContent = scanSlice.toString('utf-8', 0, Math.min(scanSlice.length, 1024 * 1024));
-      for (const pattern of this.patterns) {
-        try {
-          const re = new RegExp(pattern.regex, 'im');
-          if (re.test(textContent)) {
-            riskScore += pattern.weight;
-            reasons.push(`检测到可疑模式: ${pattern.name}`);
-            if (riskScore >= 100) break;
-          }
-        } catch {
-          // Skip invalid regex patterns
+    // Pattern matching — 使用 latin1 编码（逐字节映射，不丢失任何字节）
+    // 确保二进制文件（PDF/DOCX/图片等）中嵌入的恶意文本也能被检测
+    const scanSlice = buffer.subarray(0, Math.min(buffer.length, this.maxScanSize, 1024 * 1024));
+    const textContent = scanSlice.toString('latin1');
+    for (const pattern of this.patterns) {
+      try {
+        const re = pattern.compiled ?? new RegExp(pattern.regex, 'im');
+        if (re.test(textContent)) {
+          riskScore += pattern.weight;
+          reasons.push(`检测到可疑模式: ${pattern.name}`);
+          if (riskScore >= 100) break;
         }
+      } catch {
+        // Skip invalid regex patterns
       }
-    } catch {
-      // Binary files won't decode as utf-8 cleanly
-      reasons.push('文件内容无法以文本形式解析（二进制文件）');
-      riskScore += 5;
     }
 
     // File extension vs content mismatch
@@ -108,7 +114,7 @@ export class HeuristicScanner implements SecurityPlugin {
       verdict,
       riskScore,
       reasons,
-      details: { entropy: this.calculateEntropy(buffer).toFixed(2), fileSize: buffer.length },
+      details: { entropy: entropy.toFixed(2), fileSize: buffer.length },
       scannedAt: new Date(),
       duration: 0,
     };

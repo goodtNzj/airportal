@@ -7,26 +7,23 @@ import { logger } from './logger.service.js';
 export class CleanupService {
   private isRunning = false;
   private intervalTimer: ReturnType<typeof setInterval> | null = null;
+  private cronTask: cron.ScheduledTask | null = null;
 
   start() {
     const config = getConfig();
     const intervalSeconds = config.cleanup.interval;
-    let cronExpression: string;
 
     if (intervalSeconds < 60) {
-      // 使用 setInterval 处理小于 60 秒的间隔
       this.intervalTimer = setInterval(() => {
         this.cleanupExpired();
       }, intervalSeconds * 1000);
       logger.info(`Cleanup service started`, { interval: `${intervalSeconds}s (setInterval)` });
-    } else if (intervalSeconds < 3600) {
-      const minutes = Math.floor(intervalSeconds / 60);
-      cronExpression = `*/${minutes} * * * *`;
-      logger.info(`Cleanup service started`, { interval: `${minutes}m` });
     } else {
-      const hours = Math.floor(intervalSeconds / 3600);
-      cronExpression = `0 */${hours} * * *`;
-      logger.info(`Cleanup service started`, { interval: `${hours}h` });
+      const expr = intervalSeconds < 3600
+        ? `*/${Math.floor(intervalSeconds / 60)} * * * *`
+        : `0 */${Math.floor(intervalSeconds / 3600)} * * *`;
+      this.cronTask = cron.schedule(expr, () => this.cleanupExpired());
+      logger.info(`Cleanup service started`, { interval: expr });
     }
 
     logger.info('Cleanup configuration', {
@@ -36,16 +33,8 @@ export class CleanupService {
       runOnStart: config.cleanup.runOnStart,
     });
 
-    // 启动时执行一次清理
     if (config.cleanup.runOnStart) {
       this.cleanupExpired().catch((err) => logger.error('Startup cleanup failed', { error: err.message }));
-    }
-
-    // 定时清理
-    if (intervalSeconds >= 60) {
-      cron.schedule(cronExpression!, async () => {
-        await this.cleanupExpired();
-      });
     }
   }
 
@@ -138,7 +127,10 @@ export class CleanupService {
       clearInterval(this.intervalTimer);
       this.intervalTimer = null;
     }
-    cron.getTasks().forEach((task) => task.stop());
+    if (this.cronTask) {
+      this.cronTask.stop();
+      this.cronTask = null;
+    }
     logger.info('Cleanup service stopped');
   }
 }

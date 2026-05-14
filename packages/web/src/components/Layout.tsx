@@ -1,12 +1,14 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../stores/useStore';
+import { authApi } from '../services/api';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useStore();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await authApi.logout().catch(() => {});
     logout();
     navigate('/');
   };

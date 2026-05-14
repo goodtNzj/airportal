@@ -1,21 +1,20 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { act } from '@testing-library/react';
 
-// 模拟 zustand 的 persist 中间件
 vi.mock('zustand/middleware', () => ({
-  persist: (fn: any) => fn,
+  persist: (fn: any) => (set: any, get: any, api: any) => {
+    api.persist = { clearStorage: vi.fn(), rehydrate: vi.fn() };
+    return fn(set, get, api);
+  },
 }));
 
-// 在模拟后导入
 const { useStore } = await import('../../src/stores/useStore');
 
 describe('useStore', () => {
   beforeEach(() => {
-    // 重置 store
     act(() => {
       useStore.setState({
         user: null,
-        token: null,
         config: null,
       });
     });
@@ -24,28 +23,18 @@ describe('useStore', () => {
   it('should have initial state', () => {
     const state = useStore.getState();
     expect(state.user).toBeNull();
-    expect(state.token).toBeNull();
     expect(state.config).toBeNull();
   });
 
   it('should set user', () => {
     act(() => {
-      useStore.getState().setUser({ id: 1, username: 'test', createdAt: '2024-01-01' });
+      useStore.getState().setUser({ userId: 1, username: 'test' });
     });
 
     expect(useStore.getState().user).toEqual({
-      id: 1,
+      userId: 1,
       username: 'test',
-      createdAt: '2024-01-01',
     });
-  });
-
-  it('should set token', () => {
-    act(() => {
-      useStore.getState().setToken('test-token');
-    });
-
-    expect(useStore.getState().token).toBe('test-token');
   });
 
   it('should set config', () => {
@@ -64,27 +53,22 @@ describe('useStore', () => {
   });
 
   it('should logout', () => {
-    // 先设置用户和 token
     act(() => {
-      useStore.getState().setUser({ id: 1, username: 'test', createdAt: '2024-01-01' });
-      useStore.getState().setToken('test-token');
+      useStore.getState().setUser({ userId: 1, username: 'test' });
     });
 
     expect(useStore.getState().user).not.toBeNull();
-    expect(useStore.getState().token).not.toBeNull();
 
-    // 登出
     act(() => {
       useStore.getState().logout();
     });
 
     expect(useStore.getState().user).toBeNull();
-    expect(useStore.getState().token).toBeNull();
   });
 
   it('should clear user on setUser(null)', () => {
     act(() => {
-      useStore.getState().setUser({ id: 1, username: 'test', createdAt: '2024-01-01' });
+      useStore.getState().setUser({ userId: 1, username: 'test' });
     });
 
     expect(useStore.getState().user).not.toBeNull();

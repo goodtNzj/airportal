@@ -7,6 +7,7 @@ interface IPRecord {
   failedAttempts: number;
   firstSeen: Date;
   lastSeen: Date;
+  firstFailedAt?: Date;
   blockedAt?: Date;
   blockReason?: string;
 }
@@ -14,26 +15,48 @@ interface IPRecord {
 class IPBlacklistService {
   private ipRecords: Map<string, IPRecord> = new Map();
   private blockedIPs: Set<string> = new Set();
+  private maxIpRecords = 10_000;
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private unblockTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   init() {
     const config = getConfig();
     const cfg = config.security.ipBlacklist;
+    this.maxIpRecords = cfg.maxIpRecords ?? 10_000;
 
-    // 初始化黑名单
     for (const ip of cfg.blacklist) {
       this.blockedIPs.add(ip);
     }
+
+    this.cleanupTimer = setInterval(() => this.cleanup(), 300_000);
 
     logger.info('IP blacklist service initialized', {
       enabled: cfg.enabled,
       whitelistCount: cfg.whitelist.length,
       blacklistCount: cfg.blacklist.length,
+      maxIpRecords: this.maxIpRecords,
     });
   }
 
-  /**
-   * 检查 IP 是否被封禁
-   */
+  private enforceLimit(): void {
+    if (this.ipRecords.size <= this.maxIpRecords) return;
+
+    const sorted = Array.from(this.ipRecords.entries())
+      .filter(([, r]) => !this.blockedIPs.has(r.ip))
+      .sort((a, b) => a[1].lastSeen.getTime() - b[1].lastSeen.getTime());
+
+    // Remove enough entries to get total size (records + blocked) under the limit
+    const blockedCount = this.blockedIPs.size;
+    const nonBlockedRecords = this.ipRecords.size - blockedCount;
+    const excess = nonBlockedRecords - this.maxIpRecords + blockedCount;
+    if (excess > 0) {
+      const toRemove = sorted.slice(0, excess);
+      for (const [ip] of toRemove) {
+        this.ipRecords.delete(ip);
+      }
+    }
+  }
+
   isBlocked(ip: string): boolean {
     const config = getConfig();
     if (!config.security.ipBlacklist.enabled) return false;
@@ -41,17 +64,11 @@ class IPBlacklistService {
     return this.blockedIPs.has(ip);
   }
 
-  /**
-   * 检查 IP 是否在白名单
-   */
   isWhitelisted(ip: string): boolean {
     const config = getConfig();
     return config.security.ipBlacklist.whitelist.includes(ip);
   }
 
-  /**
-   * 记录请求
-   */
   recordRequest(ip: string): void {
     const config = getConfig();
     if (!config.security.ipBlacklist.enabled || this.isWhitelisted(ip)) return;
@@ -60,12 +77,10 @@ class IPBlacklistService {
     const record = this.ipRecords.get(ip);
 
     if (!record) {
+      this.enforceLimit();
       this.ipRecords.set(ip, {
-        ip,
-        requestCount: 1,
-        failedAttempts: 0,
-        firstSeen: now,
-        lastSeen: now,
+        ip, requestCount: 1, failedAttempts: 0,
+        firstSeen: now, lastSeen: now,
       });
       return;
     }
@@ -74,9 +89,6 @@ class IPBlacklistService {
     record.lastSeen = now;
   }
 
-  /**
-   * 记录失败请求（用于自动封禁判断）
-   */
   recordFailedAttempt(ip: string, reason: string): void {
     const config = getConfig();
     if (!config.security.ipBlacklist.enabled || this.isWhitelisted(ip)) return;
@@ -86,42 +98,26 @@ class IPBlacklistService {
     const record = this.ipRecords.get(ip);
 
     if (!record) {
+      this.enforceLimit();
       this.ipRecords.set(ip, {
-        ip,
-        requestCount: 1,
-        failedAttempts: 1,
-        firstSeen: now,
-        lastSeen: now,
+        ip, requestCount: 1, failedAttempts: 1,
+        firstSeen: now, lastSeen: now, firstFailedAt: now,
       });
       return;
     }
 
-    // 检查是否在时间窗口内
+    // 使用专用的 firstFailedAt 判断窗口，不受正常请求（更新 lastSeen）影响
     const windowStart = new Date(now.getTime() - cfg.autoBlockWindow * 1000);
-    if (record.lastSeen < windowStart) {
-      record.failedAttempts = 1;
-    } else {
-      record.failedAttempts++;
-    }
-
+    const hasExpired = !record.firstFailedAt || record.firstFailedAt < windowStart;
+    record.failedAttempts = hasExpired ? 1 : record.failedAttempts + 1;
+    record.firstFailedAt = hasExpired ? now : record.firstFailedAt;
     record.lastSeen = now;
 
-    logger.warn('Failed attempt recorded', {
-      ip,
-      reason,
-      failedAttempts: record.failedAttempts,
-      threshold: cfg.autoBlockThreshold,
-    });
-
-    // 检查是否需要自动封禁
     if (record.failedAttempts >= cfg.autoBlockThreshold) {
       this.blockIP(ip, `自动封禁：${reason}`);
     }
   }
 
-  /**
-   * 封禁 IP
-   */
   blockIP(ip: string, reason: string, duration?: number): void {
     if (this.isWhitelisted(ip)) {
       logger.warn('Cannot block whitelisted IP', { ip });
@@ -138,65 +134,64 @@ class IPBlacklistService {
 
     logger.warn('IP blocked', { ip, reason, duration });
 
-    // 如果设置了封禁时长，定时解封
+    // Clear existing unblock timer if any
+    const existing = this.unblockTimers.get(ip);
+    if (existing) {
+      clearTimeout(existing);
+    }
+
     const blockDuration = duration ?? config.security.ipBlacklist.autoBlockDuration;
     if (blockDuration > 0) {
-      setTimeout(() => {
+      this.unblockTimers.set(ip, setTimeout(() => {
+        this.unblockTimers.delete(ip);
         this.unblockIP(ip);
-      }, blockDuration * 1000);
+      }, blockDuration * 1000));
     }
   }
 
-  /**
-   * 解封 IP
-   */
   unblockIP(ip: string): void {
+    const timer = this.unblockTimers.get(ip);
+    if (timer) {
+      clearTimeout(timer);
+      this.unblockTimers.delete(ip);
+    }
     this.blockedIPs.delete(ip);
     const record = this.ipRecords.get(ip);
     if (record) {
       record.failedAttempts = 0;
+      record.firstFailedAt = undefined;
       record.blockedAt = undefined;
       record.blockReason = undefined;
     }
     logger.info('IP unblocked', { ip });
   }
 
-  /**
-   * 获取 IP 记录
-   */
   getIPRecord(ip: string): IPRecord | undefined {
     return this.ipRecords.get(ip);
   }
 
-  /**
-   * 获取所有被封禁的 IP
-   */
   getBlockedIPs(): string[] {
     return Array.from(this.blockedIPs);
   }
 
-  /**
-   * 清理过期记录
-   */
   cleanup(): void {
-    const now = new Date();
+    const now = Date.now();
     const maxAge = 24 * 60 * 60 * 1000;
+    let removed = 0;
 
     for (const [ip, record] of this.ipRecords) {
-      if (!this.blockedIPs.has(ip) && now.getTime() - record.lastSeen.getTime() > maxAge) {
+      if (!this.blockedIPs.has(ip) && now - record.lastSeen.getTime() > maxAge) {
         this.ipRecords.delete(ip);
+        removed++;
       }
+    }
+
+    if (removed > 0) {
+      logger.debug('IP record cleanup completed', { removed, remaining: this.ipRecords.size });
     }
   }
 
-  /**
-   * 获取统计信息
-   */
-  getStats(): {
-    totalRecords: number;
-    blockedCount: number;
-    topFailedIPs: Array<{ ip: string; failedAttempts: number }>;
-  } {
+  getStats() {
     const topFailedIPs = Array.from(this.ipRecords.values())
       .filter((r) => r.failedAttempts > 0)
       .sort((a, b) => b.failedAttempts - a.failedAttempts)
