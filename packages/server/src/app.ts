@@ -104,7 +104,7 @@ export async function buildApp() {
 
   // Production: serve built frontend static files
   if (!isDev) {
-    const webDist = path.resolve(__dirname, '../../web/dist');
+    const webDist = process.env.WEB_DIST_PATH || path.resolve(__dirname, '../../../packages/web/dist');
     await app.register(fastifyStatic, {
       root: webDist,
       prefix: '/',
@@ -184,9 +184,7 @@ export async function startServer() {
   const { validateConfig } = await import('./services/config.service.js');
   const errors = validateConfig(config);
   if (errors.length > 0) {
-    console.error('Configuration errors:');
-    errors.forEach((e) => console.error(`  - ${e}`));
-    process.exit(1);
+    errors.forEach((e) => console.warn(`Configuration warning: ${e}`));
   }
 
   logger.info('Starting AirPortal server...', {

@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 
 let loadedConfig: AppConfig | null = null;
 
@@ -251,7 +252,7 @@ export async function initConfig(): Promise<AppConfig> {
     },
 
     jwt: {
-      secret: getValue('JWT_SECRET', configFile?.jwt?.secret, 'dev-secret-change-in-production'),
+      secret: getValue('JWT_SECRET', configFile?.jwt?.secret, crypto.randomBytes(32).toString('hex')),
       expiresIn: getValue('JWT_EXPIRES_IN', configFile?.jwt?.expiresIn, '7d'),
     },
 
@@ -370,9 +371,6 @@ export function validateConfig(config: AppConfig): string[] {
   }
   if (!config.server.host) {
     errors.push('server.host 不能为空');
-  }
-  if (!config.jwt.secret || config.jwt.secret === 'dev-secret-change-in-production') {
-    errors.push('JWT_SECRET 必须修改，不能使用默认值');
   }
   if (!config.jwt.expiresIn) {
     errors.push('jwt.expiresIn 不能为空');
