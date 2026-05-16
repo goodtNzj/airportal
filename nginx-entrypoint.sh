@@ -1,5 +1,6 @@
 #!/bin/sh
-set -e
+# This script runs in /docker-entrypoint.d/ before nginx starts.
+# It waits for the node container to copy web dist files into the shared volume.
 
 echo "Waiting for web dist files from node service..."
 MAX_WAIT=60
@@ -15,5 +16,4 @@ if [ ! -d "/web-dist/assets" ]; then
     exit 1
 fi
 
-echo "Web dist ready. Starting nginx..."
-exec nginx -g 'daemon off;'
+echo "Web dist ready."

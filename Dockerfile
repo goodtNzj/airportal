@@ -3,7 +3,7 @@
 # ============================
 FROM node:22-alpine AS deps
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN pnpm install --frozen-lockfile
 # ============================
 FROM node:22-alpine AS build
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -42,7 +42,9 @@ RUN pnpm --filter @airportal/server build
 # ============================
 FROM node:22-alpine AS production
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
+RUN apk add --no-cache su-exec wget
 
 WORKDIR /app
 
@@ -60,11 +62,16 @@ RUN cd packages/server && npx prisma generate --schema=./prisma/schema.prisma
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 node && \
-    mkdir -p /app/uploads /app/packages/server/prisma/data && \
-    chown -R node:nodejs /app/uploads /app/packages/server/prisma/data
+    mkdir -p /app/uploads /app/packages/server/prisma/data /web-dist && \
+    chown -R node:nodejs /app/uploads /app/packages/server/prisma/data /web-dist
 
-USER node
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "cp -r /app/packages/web/dist/. /web-dist/ 2>/dev/null; node packages/server/dist/index.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 http://localhost:3000/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["node", "packages/server/dist/index.js"]
