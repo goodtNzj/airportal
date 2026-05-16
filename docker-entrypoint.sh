@@ -13,5 +13,11 @@ done
 # Copy web dist to shared volume (for nginx to serve)
 cp -r /app/packages/web/dist/. /web-dist/
 
+# Initialize database schema (only creates tables if they don't exist)
+cd /app/packages/server
+npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss
+
+cd /app
+
 # Drop to node user and run the main command
 exec su-exec node:node "$@"

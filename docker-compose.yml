@@ -12,7 +12,6 @@ services:
       - TRUST_PROXY=true
       - DATABASE_URL=file:/app/packages/server/prisma/data/airportal.db
       - UPLOAD_DIR=/app/uploads
-      - ALLOWED_ORIGINS=http://localhost
     volumes:
       - uploads:/app/uploads
       - web-dist:/web-dist
