@@ -90,7 +90,7 @@
   },
   "log": {
     "level": "info",
-    "file": "",
+    "file": "/app/logs/airportal.log",
     "rotation": {
       "enabled": false,
       "interval": 0,

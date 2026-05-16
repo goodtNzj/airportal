@@ -60,8 +60,8 @@ COPY --from=build /app/packages/web/dist ./packages/web/dist
 
 RUN cd packages/server && npx prisma generate --schema=./prisma/schema.prisma
 
-RUN mkdir -p /app/uploads /app/packages/server/prisma/data /web-dist && \
-    chown -R node:node /app/uploads /app/packages/server/prisma/data /web-dist
+RUN mkdir -p /app/uploads /app/packages/server/prisma/data /web-dist /app/logs && \
+    chown -R node:node /app/uploads /app/packages/server/prisma/data /web-dist /app/logs
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
