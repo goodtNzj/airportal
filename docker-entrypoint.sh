@@ -6,7 +6,7 @@ set -e
 # layer, so we do it at container start as root before dropping privileges.
 for dir in /app/uploads /app/packages/server/prisma/data /web-dist; do
     if [ -d "$dir" ]; then
-        chown -R node:nodejs "$dir" 2>/dev/null || true
+        chown -R node:node "$dir" 2>/dev/null || true
     fi
 done
 
@@ -14,4 +14,4 @@ done
 cp -r /app/packages/web/dist/. /web-dist/
 
 # Drop to node user and run the main command
-exec su-exec node:nodejs "$@"
+exec su-exec node:node "$@"
