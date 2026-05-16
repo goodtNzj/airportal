@@ -10,6 +10,9 @@ for dir in /app/uploads /app/packages/server/prisma/data /web-dist /app/logs; do
     fi
 done
 
+# Clean up stale healthcheck files
+rm -f /app/health /app/health.*
+
 # Copy web dist to shared volume (for nginx to serve)
 cp -r /app/packages/web/dist/. /web-dist/
 

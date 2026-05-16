@@ -17,13 +17,14 @@ services:
       - web-dist:/web-dist
       - ./data:/app/packages/server/prisma/data
       - ./logs:/app/logs
+      - ./config.json:/app/config.json:ro
     logging:
       driver: local
       options:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:3000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
