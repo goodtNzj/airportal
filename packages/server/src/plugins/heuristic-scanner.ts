@@ -79,7 +79,7 @@ export class HeuristicScanner implements SecurityPlugin {
 
     // Pattern matching — 使用 latin1 编码（逐字节映射，不丢失任何字节）
     // 确保二进制文件（PDF/DOCX/图片等）中嵌入的恶意文本也能被检测
-    const scanSlice = buffer.subarray(0, Math.min(buffer.length, this.maxScanSize, 1024 * 1024));
+    const scanSlice = buffer.subarray(0, Math.min(buffer.length, this.maxScanSize));
     const textContent = scanSlice.toString('latin1');
     for (const pattern of this.patterns) {
       try {

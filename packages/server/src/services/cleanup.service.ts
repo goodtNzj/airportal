@@ -1,8 +1,8 @@
 import cron from 'node-cron';
-import fs from 'fs/promises';
 import { prisma } from './prisma.service.js';
 import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
+import { fileStorageService } from './file-storage.service.js';
 
 export class CleanupService {
   private isRunning = false;
@@ -76,7 +76,7 @@ export class CleanupService {
           // 清理文件
           if (config.cleanup.cleanFiles && transfer.filePath) {
             try {
-              await fs.unlink(transfer.filePath);
+              await fileStorageService.deleteFile(transfer.filePath);
               filesDeleted++;
               logger.debug(`Deleted file`, { pickupCode: transfer.pickupCode, path: transfer.filePath });
             } catch (err) {
