@@ -4,6 +4,7 @@ import { prisma } from './prisma.service.js';
 import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
 import { AppError, ErrorCodes } from './errors.service.js';
+import { metricsService } from './metrics.service.js';
 import type { UserPayload } from '../types/index.js';
 
 interface LockRecord {
@@ -47,6 +48,7 @@ export class AuthService {
     if (record.count >= config.security.rateLimit.authLockThreshold) {
       record.lockedUntil = now + config.security.rateLimit.authLockDurationMs;
       logger.warn('Account locked due to too many failures', { username, attempts: record.count });
+      metricsService.recordAuthAccountLock();
       this.cleanupStaleLocks();
     }
   }
@@ -85,12 +87,15 @@ export class AuthService {
         // Do NOT call recordFailure — registration should not trigger account lockout
         // (prevents attacker from locking out legitimate users via repeated registration)
         logger.warn('Registration failed: username exists', { username });
+        metricsService.recordAuthAttempt('register', 'failure');
         throw new AppError(ErrorCodes.USER_EXISTS, '用户名已存在');
       }
+      metricsService.recordAuthAttempt('register', 'failure');
       throw error;
     }
 
     this.recordSuccess(username);
+    metricsService.recordAuthAttempt('register', 'success');
     logger.info('User registered', { username, userId: user.id });
     return this.generateToken(user.id, user.username);
   }
@@ -105,6 +110,7 @@ export class AuthService {
     if (!user) {
       this.recordFailure(username);
       logger.warn('Login failed: user not found', { username });
+      metricsService.recordAuthAttempt('login', 'failure');
       throw new AppError(ErrorCodes.INVALID_CREDENTIALS, '用户名或密码错误', 401);
     }
 
@@ -113,10 +119,12 @@ export class AuthService {
     if (!isValid) {
       this.recordFailure(username);
       logger.warn('Login failed: invalid password', { username });
+      metricsService.recordAuthAttempt('login', 'failure');
       throw new AppError(ErrorCodes.INVALID_CREDENTIALS, '用户名或密码错误', 401);
     }
 
     this.recordSuccess(username);
+    metricsService.recordAuthAttempt('login', 'success');
     logger.info('User logged in', { username, userId: user.id });
     return this.generateToken(user.id, user.username);
   }

@@ -6,6 +6,7 @@ import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
 import { AppError, ErrorCodes } from './errors.service.js';
 import { encrypt, decrypt } from './encryption.service.js';
+import { metricsService } from './metrics.service.js';
 import type { TransferResult, FolderMetadata } from '../types/index.js';
 
 export class TransferService {
@@ -24,6 +25,7 @@ export class TransferService {
     const config = getConfig();
 
     if (textContent.length > config.security.upload.maxTextLength) {
+      metricsService.recordTransferCreated('text', !!userId, 'rejected');
       throw new AppError(ErrorCodes.TEXT_TOO_LONG, `文本长度超过限制（最大 ${config.security.upload.maxTextLength} 字符）`);
     }
 
@@ -44,6 +46,9 @@ export class TransferService {
         ownerOnly,
       },
     });
+
+    metricsService.recordTransferCreated('text', !!userId, 'success');
+    metricsService.recordTransferTextLength(textContent.length);
 
     logger.info('Text transfer created', {
       pickupCode,
@@ -68,15 +73,26 @@ export class TransferService {
     ownerOnly: boolean = false
   ): Promise<TransferResult> {
     const config = getConfig();
+    const isFolder = !!folderMetadata;
+    const contentType: 'file' | 'folder' = isFolder ? 'folder' : 'file';
 
     if (file.data.length > config.security.upload.maxFileSize) {
+      metricsService.recordTransferCreated(contentType, !!userId, 'rejected');
       throw new AppError(ErrorCodes.FILE_TOO_LARGE, `文件大小超过限制（最大 ${config.security.upload.maxFileSize / 1024 / 1024}MB）`);
     }
 
-    await fileStorageService.checkDiskQuota(file.data.length);
+    try {
+      await fileStorageService.checkDiskQuota(file.data.length);
+    } catch (error) {
+      if (error instanceof AppError) {
+        metricsService.recordTransferCreated(contentType, !!userId, 'rejected');
+      }
+      throw error;
+    }
 
     const ext = path.extname(file.filename).toLowerCase();
     if (config.security.upload.blockedExtensions.includes(ext)) {
+      metricsService.recordTransferCreated(contentType, !!userId, 'rejected');
       throw new AppError(ErrorCodes.FILE_TYPE_BLOCKED, '不支持的文件类型');
     }
 
@@ -85,12 +101,11 @@ export class TransferService {
 
     const actualExpiry = Math.min(expiresIn, config.transfer.maxExpiry);
     const expiresAt = new Date(Date.now() + actualExpiry * 1000);
-    const isFolder = !!folderMetadata;
 
     await prisma.transfer.create({
       data: {
         pickupCode,
-        contentType: isFolder ? 'folder' : 'file',
+        contentType,
         fileName: isFolder ? folderMetadata.folderName : file.filename,
         fileSize: file.data.length,
         filePath,
@@ -103,6 +118,8 @@ export class TransferService {
         ownerOnly,
       },
     });
+
+    metricsService.recordTransferCreated(contentType, !!userId, 'success', file.data.length);
 
     logger.info(`${isFolder ? 'Folder' : 'File'} transfer created`, {
       pickupCode,
@@ -130,11 +147,20 @@ export class TransferService {
 
     if (!transfer) {
       logger.warn('Transfer not found', { pickupCode });
+      metricsService.recordTransferClaimed('text', 'not_found');
       throw new AppError(ErrorCodes.TRANSFER_NOT_FOUND, '取件码不存在', 404);
     }
 
+    const metricContentType: 'text' | 'file' | 'folder' =
+      transfer.contentType === 'text'
+        ? 'text'
+        : transfer.contentType === 'folder'
+          ? 'folder'
+          : 'file';
+
     if (new Date() > transfer.expiresAt) {
       logger.info('Transfer expired on access', { pickupCode });
+      metricsService.recordTransferClaimed(metricContentType, 'expired');
       this.deleteTransfer(transfer.id, transfer.filePath).catch((err) => {
         logger.error('Failed to cleanup expired transfer', {
           pickupCode,
@@ -146,15 +172,18 @@ export class TransferService {
 
     if (transfer.ownerOnly) {
       if (!requestUserId) {
+        metricsService.recordTransferClaimed(metricContentType, 'login_required');
         throw new AppError(ErrorCodes.LOGIN_REQUIRED, '此内容需要登录后领取', 403);
       }
       if (requestUserId !== transfer.userId) {
+        metricsService.recordTransferClaimed(metricContentType, 'owner_only');
         throw new AppError(ErrorCodes.OWNER_ONLY, '此内容仅限创建者领取', 403);
       }
     }
 
     if (transfer.maxDownloads > 0 && transfer.downloadCount >= transfer.maxDownloads) {
       logger.warn('Max downloads reached', { pickupCode, count: transfer.downloadCount });
+      metricsService.recordTransferClaimed(metricContentType, 'max_downloads');
       throw new AppError(ErrorCodes.MAX_DOWNLOADS, '已达到最大下载次数');
     }
 
@@ -168,6 +197,7 @@ export class TransferService {
       });
       if (updated.count === 0) {
         logger.warn('Concurrent download exceeded max', { pickupCode, maxDownloads: transfer.maxDownloads });
+        metricsService.recordTransferClaimed(metricContentType, 'max_downloads');
         throw new AppError(ErrorCodes.MAX_DOWNLOADS, '已达到最大下载次数');
       }
     } else {
@@ -187,6 +217,8 @@ export class TransferService {
     if (result.contentType === 'text' && result.textContent) {
       result.textContent = decrypt(result.textContent);
     }
+
+    metricsService.recordTransferClaimed(metricContentType, 'success');
 
     logger.info('Transfer accessed', {
       pickupCode,

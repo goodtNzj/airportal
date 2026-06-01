@@ -128,6 +128,12 @@ export interface AppConfig {
     origins: string[];
   };
   p2p: P2PConfig;
+  metrics: {
+    enabled: boolean;
+    path: string;
+    collectNode: boolean;
+    publicAccess: boolean;
+  };
 }
 
 /**
@@ -355,6 +361,13 @@ export async function initConfig(): Promise<AppConfig> {
       requestTimeout: getValue('P2P_REQUEST_TIMEOUT', configFile?.p2p?.requestTimeout, 60000, Number),
       iceServers: loadICEServers(configFile),
     },
+
+    metrics: {
+      enabled: getValue('METRICS_ENABLED', configFile?.metrics?.enabled, true, (v) => v !== 'false'),
+      path: getValue('METRICS_PATH', configFile?.metrics?.path, '/metrics'),
+      collectNode: getValue('METRICS_COLLECT_NODE', configFile?.metrics?.collectNode, true, (v) => v !== 'false'),
+      publicAccess: getValue('METRICS_PUBLIC', configFile?.metrics?.publicAccess, false, (v) => v === 'true'),
+    },
   };
 
   return loadedConfig;
@@ -374,6 +387,12 @@ export function validateConfig(config: AppConfig): string[] {
   }
   if (!config.jwt.expiresIn) {
     errors.push('jwt.expiresIn 不能为空');
+  }
+  if (
+    config.jwt.secret === 'dev-secret-change-in-production' ||
+    config.jwt.secret === 'your-super-secret-jwt-key-change-in-production'
+  ) {
+    errors.push('JWT_SECRET 仍为默认值，生产环境请修改 .env 中的 JWT_SECRET');
   }
   if (config.security.rateLimit.globalMax < 1) {
     errors.push('security.rateLimit.globalMax 必须大于 0');
@@ -445,6 +464,13 @@ export function validateConfig(config: AppConfig): string[] {
           errors.push(`p2p.iceServers TURN 服务器 (${urls}) 必须配置 username 和 credential`);
         }
       }
+    }
+  }
+
+  // Metrics config validation
+  if (config.metrics) {
+    if (config.metrics.path && !/^\/[A-Za-z0-9_\-/]*$/.test(config.metrics.path)) {
+      errors.push('metrics.path 必须是合法的 URL 路径（如 /metrics）');
     }
   }
 

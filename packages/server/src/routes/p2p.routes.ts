@@ -9,6 +9,7 @@ import { logger } from '../services/logger.service.js';
 import { ipBlacklistService } from '../services/ip-blacklist.service.js';
 import { authService } from '../services/auth.service.js';
 import { getConfig } from '../config/index.js';
+import { metricsService } from '../services/metrics.service.js';
 
 interface WebSocketQuery {
   deviceName?: string;
@@ -71,6 +72,7 @@ export async function p2pRoutes(app: FastifyInstance) {
 
       if (config.security.ipBlacklist.enabled && ipBlacklistService.isBlocked(ip)) {
         logger.warn('Blocked IP attempted P2P WebSocket connection', { ip });
+        metricsService.recordP2PConnection('rejected_blocked');
         socket.close(4001, 'Access denied');
         return;
       }
@@ -79,6 +81,7 @@ export async function p2pRoutes(app: FastifyInstance) {
       const origin = req.headers.origin;
       if (!origin) {
         logger.warn('P2P WebSocket rejected: missing Origin', { ip });
+        metricsService.recordP2PConnection('rejected_origin');
         socket.close(4001, 'Origin required');
         return;
       }
@@ -91,11 +94,13 @@ export async function p2pRoutes(app: FastifyInstance) {
         const isWhitelisted = allowedOrigins.includes(origin);
         if (!isSameOrigin && !isWhitelisted) {
           logger.warn('P2P WebSocket rejected: disallowed origin', { origin, ip });
+          metricsService.recordP2PConnection('rejected_origin');
           socket.close(4001, 'Origin not allowed');
           return;
         }
       } catch {
         logger.warn('P2P WebSocket rejected: invalid origin', { origin, ip });
+        metricsService.recordP2PConnection('rejected_origin');
         socket.close(4001, 'Invalid origin');
         return;
       }
@@ -109,6 +114,7 @@ export async function p2pRoutes(app: FastifyInstance) {
           authService.verifyToken(authToken);
         } catch {
           logger.warn('P2P WebSocket rejected: invalid token', { ip });
+          metricsService.recordP2PConnection('rejected_auth');
           socket.close(4001, 'Invalid token');
           return;
         }
@@ -118,6 +124,7 @@ export async function p2pRoutes(app: FastifyInstance) {
       const connCheck = discoveryService.canAcceptConnection(ip);
       if (!connCheck.allowed) {
         logger.warn('P2P connection rejected', { ip, reason: connCheck.reason });
+        metricsService.recordP2PConnection('rejected_limit');
         socket.close(4003, connCheck.reason || 'Connection limit reached');
         return;
       }
@@ -125,6 +132,11 @@ export async function p2pRoutes(app: FastifyInstance) {
       const deviceName = getDeviceName(req);
 
       const socketId = discoveryService.addPeer(ip, deviceName, socket);
+      metricsService.recordP2PConnection('accepted');
+      metricsService.setP2PConnections(
+        discoveryService.getPeerCount(),
+        0
+      );
 
       // Auto-join room if roomId provided in query
       let currentRoom: { id: string; name?: string } | null = null;
@@ -134,6 +146,7 @@ export async function p2pRoutes(app: FastifyInstance) {
           currentRoom = { id: result.room.id, name: result.room.name };
         }
       }
+      metricsService.setP2PRooms(roomService.getRoomCount());
 
       // Send initial peer list (room peers only)
       const roomPeers = roomService.getRoomPeers(socketId);
@@ -162,6 +175,7 @@ export async function p2pRoutes(app: FastifyInstance) {
           // Handle room-related messages
           if (message.type === 'create-room') {
             const room = roomService.createRoom(socketId, message.name, message.expirySeconds);
+            metricsService.setP2PRooms(roomService.getRoomCount());
             socket.send(JSON.stringify({
               type: 'room-created',
               room: { id: room.id, name: room.name },
@@ -171,6 +185,7 @@ export async function p2pRoutes(app: FastifyInstance) {
 
           if (message.type === 'join-room') {
             const result = roomService.joinRoom(socketId, message.roomId);
+            metricsService.setP2PRooms(roomService.getRoomCount());
             if (result.success && result.room) {
               socket.send(JSON.stringify({
                 type: 'room-joined',
@@ -193,17 +208,20 @@ export async function p2pRoutes(app: FastifyInstance) {
 
           if (message.type === 'leave-room') {
             roomService.leaveRoom(socketId);
+            metricsService.setP2PRooms(roomService.getRoomCount());
             socket.send(JSON.stringify({ type: 'room-left' }));
             return;
           }
 
           // Forward other messages to signaling service
           signalingService.handleMessage(socketId, message);
+          metricsService.recordSignalingMessage(String(message.type || 'unknown'), 'forwarded');
         } catch (error) {
           logger.error('Failed to parse WebSocket message', {
             socketId,
             error: error instanceof Error ? error.message : String(error),
           });
+          metricsService.recordSignalingMessage('parse_error', 'error');
           socket.send(
             JSON.stringify({
               type: 'error',
@@ -218,6 +236,11 @@ export async function p2pRoutes(app: FastifyInstance) {
       socket.on('close', (code: number, reason: Buffer) => {
         roomService.leaveRoom(socketId);
         discoveryService.removePeer(socketId);
+        metricsService.setP2PConnections(
+          discoveryService.getPeerCount(),
+          0
+        );
+        metricsService.setP2PRooms(roomService.getRoomCount());
         logger.info('WebSocket connection closed', {
           socketId,
           code,
@@ -233,6 +256,11 @@ export async function p2pRoutes(app: FastifyInstance) {
         });
         roomService.leaveRoom(socketId);
         discoveryService.removePeer(socketId);
+        metricsService.setP2PConnections(
+          discoveryService.getPeerCount(),
+          0
+        );
+        metricsService.setP2PRooms(roomService.getRoomCount());
       });
     }
   );

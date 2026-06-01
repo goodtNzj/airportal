@@ -1,5 +1,6 @@
 import type { SecurityPlugin, ScanResult, FileMetadata } from './types.js';
 import { logger } from '../services/logger.service.js';
+import { metricsService } from '../services/metrics.service.js';
 
 export class PluginManager {
   private plugins: SecurityPlugin[] = [];
@@ -25,6 +26,7 @@ export class PluginManager {
           name: plugin.name,
           error: error instanceof Error ? error.message : String(error),
         });
+        metricsService.recordSecurityPluginError(plugin.name, 'init');
         throw error;
       }
     }
@@ -40,6 +42,7 @@ export class PluginManager {
           name: plugin.name,
           error: error instanceof Error ? error.message : String(error),
         });
+        metricsService.recordSecurityPluginError(plugin.name, 'shutdown');
       }
     }
     this.plugins = [];
@@ -59,11 +62,18 @@ export class PluginManager {
         result.duration = Date.now() - start;
         result.scannedAt = new Date();
         results.push(result);
+        metricsService.recordSecurityScan(
+          plugin.name,
+          'file',
+          result.verdict,
+          result.duration / 1000
+        );
       } catch (error) {
         logger.error('Plugin scanFile failed', {
           name: plugin.name,
           error: error instanceof Error ? error.message : String(error),
         });
+        metricsService.recordSecurityPluginError(plugin.name, 'scanFile');
         // Treat plugin failure as suspicious
         results.push({
           verdict: 'suspicious',
@@ -72,6 +82,7 @@ export class PluginManager {
           scannedAt: new Date(),
           duration: 0,
         });
+        metricsService.recordSecurityScan(plugin.name, 'file', 'suspicious', 0);
       }
     }
 
@@ -92,11 +103,18 @@ export class PluginManager {
         result.duration = Date.now() - start;
         result.scannedAt = new Date();
         results.push(result);
+        metricsService.recordSecurityScan(
+          plugin.name,
+          'text',
+          result.verdict,
+          result.duration / 1000
+        );
       } catch (error) {
         logger.error('Plugin scanText failed', {
           name: plugin.name,
           error: error instanceof Error ? error.message : String(error),
         });
+        metricsService.recordSecurityPluginError(plugin.name, 'scanText');
       }
     }
 

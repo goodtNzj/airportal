@@ -3,6 +3,7 @@ import { prisma } from './prisma.service.js';
 import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
 import { fileStorageService } from './file-storage.service.js';
+import { metricsService } from './metrics.service.js';
 
 export class CleanupService {
   private isRunning = false;
@@ -43,11 +44,13 @@ export class CleanupService {
 
     if (this.isRunning) {
       logger.debug('Cleanup already running, skipping');
+      metricsService.recordCleanupFinish(Date.now(), 'skipped');
       return;
     }
 
     this.isRunning = true;
     const startTime = Date.now();
+    const metricStart = metricsService.recordCleanupStart();
 
     try {
       const now = new Date();
@@ -61,6 +64,7 @@ export class CleanupService {
 
       if (expiredTransfers.length === 0) {
         logger.debug('No expired transfers found');
+        metricsService.recordCleanupFinish(metricStart, 'success', 0, 0, 0, 0);
         return;
       }
 
@@ -107,6 +111,15 @@ export class CleanupService {
       }
 
       const duration = Date.now() - startTime;
+      metricsService.recordCleanupFinish(
+        metricStart,
+        'success',
+        filesDeleted,
+        filesFailed,
+        recordsUpdated,
+        recordsDeleted
+      );
+      metricsService.recordCleanupScan(expiredTransfers.length, expiredTransfers.length);
       logger.info('Cleanup completed', {
         total: expiredTransfers.length,
         filesDeleted,
@@ -117,6 +130,7 @@ export class CleanupService {
       });
     } catch (err) {
       logger.error('Cleanup failed', { error: err instanceof Error ? err.message : String(err) });
+      metricsService.recordCleanupFinish(metricStart, 'error');
     } finally {
       this.isRunning = false;
     }

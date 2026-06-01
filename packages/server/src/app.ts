@@ -15,6 +15,9 @@ import { logger } from './services/logger.service.js';
 import { AppError, ErrorCodes } from './services/errors.service.js';
 import { ZodError } from 'zod';
 import { registerViteHook } from './vite-dev.js';
+import { metricsService } from './services/metrics.service.js';
+import { registerMetricsHooks } from './middlewares/metrics.middleware.js';
+import { metricsRefreshService } from './services/metrics-refresh.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV !== 'production';
@@ -79,6 +82,27 @@ export async function buildApp() {
   // Cookie 解析（HttpOnly JWT）
   await app.register(cookie);
 
+  // Prometheus 指标
+  if (config.metrics?.enabled !== false) {
+    metricsService.init();
+    await registerMetricsHooks(app);
+
+    const metricsPath = config.metrics?.path || '/metrics';
+    app.get(metricsPath, async (_request, reply) => {
+      try {
+        const text = await metricsService.render();
+        const ct = await metricsService.contentType();
+        reply.header('Content-Type', ct);
+        return reply.send(text);
+      } catch (error) {
+        logger.error('Failed to render metrics', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return reply.status(500).send('# failed to render metrics\n');
+      }
+    });
+  }
+
   // 文件上传
   await app.register(multipart, {
     limits: {
@@ -100,6 +124,9 @@ export async function buildApp() {
       success: false,
       error: { code: 'RATE_LIMIT_EXCEEDED', message: '请求过于频繁，请稍后再试' },
     }),
+    onExceeded: () => {
+      metricsService.recordRateLimitRejection('global');
+    },
   });
 
   // Production: serve built frontend static files
@@ -201,6 +228,11 @@ export async function startServer() {
 
   // 启动清理服务
   cleanupService.start();
+
+  // 启动指标定时刷新
+  if (config.metrics?.enabled !== false) {
+    metricsRefreshService.start();
+  }
 
   // 启动服务器
   await app.listen({
