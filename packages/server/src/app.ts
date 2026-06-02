@@ -124,8 +124,17 @@ export async function buildApp() {
       success: false,
       error: { code: 'RATE_LIMIT_EXCEEDED', message: '请求过于频繁，请稍后再试' },
     }),
-    onExceeded: () => {
-      metricsService.recordRateLimitRejection('global');
+    onExceeded: (request) => {
+      const url = request.url || '';
+      let scope: 'global' | 'upload' | 'auth' | 'ip_management' = 'global';
+      if (url.startsWith('/api/transfers') && !url.includes('/config') && !url.includes('/history')) {
+        scope = 'upload';
+      } else if (url.startsWith('/api/auth/')) {
+        scope = 'auth';
+      } else if (url.startsWith('/api/security/ip/')) {
+        scope = 'ip_management';
+      }
+      metricsService.recordRateLimitRejection(scope);
     },
   });
 

@@ -102,8 +102,7 @@ class MetricsRefreshService {
   private refreshP2PStats(): void {
     try {
       const total = discoveryService.getPeerCount();
-      let transferring = 0;
-      // We don't expose per-peer status from discovery directly; just track total.
+      const transferring = discoveryService.getTransferringCount();
       metricsService.setP2PConnections(total, transferring);
       metricsService.setP2PRooms(roomService.getRoomCount());
       // Pending P2P transfers live inside signalingService

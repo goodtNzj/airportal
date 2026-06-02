@@ -110,6 +110,7 @@ class MetricsService {
   readonly p2pRoomsActive: Gauge<string>;
   readonly p2pSignalingMessages: Counter<'type' | 'result'>;
   readonly p2pPendingTransfers: Gauge<string>;
+  readonly p2pWebSocketErrors: Counter<'type'>;
 
   // Storage metrics
   readonly storageBytes: Gauge<string>;
@@ -324,6 +325,13 @@ class MetricsService {
       registers: [this.registry],
     });
 
+    this.p2pWebSocketErrors = new Counter({
+      name: 'airportal_p2p_websocket_errors_total',
+      help: 'Total P2P WebSocket connection errors by type.',
+      labelNames: ['type'] as const,
+      registers: [this.registry],
+    });
+
     this.storageBytes = new Gauge({
       name: 'airportal_storage_bytes',
       help: 'Total storage in use in bytes, grouped by type.',
@@ -505,7 +513,7 @@ class MetricsService {
     this.authAccountLocks.inc();
   }
 
-  recordSecurityBlock(reason: string): void {
+  recordSecurityBlock(reason: 'auto' | 'malicious' | 'behavior' | 'manual'): void {
     if (!this.enabled) return;
     this.securityBlockedTotal.inc({ reason });
   }
@@ -609,7 +617,12 @@ class MetricsService {
     this.p2pConnectionsTotal.inc({ result });
   }
 
-  recordSignalingMessage(type: string, result: 'forwarded' | 'rejected' | 'error'): void {
+  recordP2PWebSocketError(type: 'close_abnormal' | 'error' | 'parse_error'): void {
+    if (!this.enabled) return;
+    this.p2pWebSocketErrors.inc({ type });
+  }
+
+  recordSignalingMessage(type: 'offer' | 'answer' | 'ice-candidate' | 'transfer-request' | 'transfer-accept' | 'transfer-reject' | 'other', result: 'forwarded' | 'rejected' | 'error'): void {
     if (!this.enabled) return;
     this.p2pSignalingMessages.inc({ type, result });
   }

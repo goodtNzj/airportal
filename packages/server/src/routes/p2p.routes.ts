@@ -135,7 +135,7 @@ export async function p2pRoutes(app: FastifyInstance) {
       metricsService.recordP2PConnection('accepted');
       metricsService.setP2PConnections(
         discoveryService.getPeerCount(),
-        0
+        discoveryService.getTransferringCount()
       );
 
       // Auto-join room if roomId provided in query
@@ -215,13 +215,18 @@ export async function p2pRoutes(app: FastifyInstance) {
 
           // Forward other messages to signaling service
           signalingService.handleMessage(socketId, message);
-          metricsService.recordSignalingMessage(String(message.type || 'unknown'), 'forwarded');
+          const msgType = message.type;
+          const normalizedType: 'offer' | 'answer' | 'ice-candidate' | 'transfer-request' | 'transfer-accept' | 'transfer-reject' | 'other' =
+            (msgType === 'offer' || msgType === 'answer' || msgType === 'ice-candidate' || msgType === 'transfer-request' || msgType === 'transfer-accept' || msgType === 'transfer-reject')
+              ? msgType
+              : 'other';
+          metricsService.recordSignalingMessage(normalizedType, 'forwarded');
         } catch (error) {
           logger.error('Failed to parse WebSocket message', {
             socketId,
             error: error instanceof Error ? error.message : String(error),
           });
-          metricsService.recordSignalingMessage('parse_error', 'error');
+          metricsService.recordSignalingMessage('other', 'error');
           socket.send(
             JSON.stringify({
               type: 'error',
@@ -236,9 +241,12 @@ export async function p2pRoutes(app: FastifyInstance) {
       socket.on('close', (code: number, reason: Buffer) => {
         roomService.leaveRoom(socketId);
         discoveryService.removePeer(socketId);
+        if (code !== 1000 && code !== 1001) {
+          metricsService.recordP2PWebSocketError('close_abnormal');
+        }
         metricsService.setP2PConnections(
           discoveryService.getPeerCount(),
-          0
+          discoveryService.getTransferringCount()
         );
         metricsService.setP2PRooms(roomService.getRoomCount());
         logger.info('WebSocket connection closed', {
@@ -254,11 +262,12 @@ export async function p2pRoutes(app: FastifyInstance) {
           socketId,
           error: error.message,
         });
+        metricsService.recordP2PWebSocketError('error');
         roomService.leaveRoom(socketId);
         discoveryService.removePeer(socketId);
         metricsService.setP2PConnections(
           discoveryService.getPeerCount(),
-          0
+          discoveryService.getTransferringCount()
         );
         metricsService.setP2PRooms(roomService.getRoomCount());
       });

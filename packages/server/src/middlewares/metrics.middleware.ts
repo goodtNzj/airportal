@@ -10,6 +10,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     metricsStartTime?: bigint;
     metricsEndTimer?: () => void;
+    metricsStartBytes?: number;
   }
 }
 
@@ -29,6 +30,7 @@ const onRequestHook: onRequestHookHandler = (request, _reply, done) => {
   if (request.url.startsWith('/metrics')) return done();
   request.metricsStartTime = process.hrtime.bigint();
   request.metricsEndTimer = metricsService.startHttp(request.method);
+  request.metricsStartBytes = (_reply.raw as unknown as { bytesWritten?: number }).bytesWritten ?? 0;
   done();
 };
 
@@ -42,6 +44,7 @@ const onResponseHook: onResponseHookHandler = (request, reply, done) => {
   const durationSeconds = Number(elapsedNs) / 1e9;
   const statusCode = reply.statusCode;
   const routeUrl = getRouteUrl(request);
+  const responseSize = Math.max(0, ((reply.raw as unknown as { bytesWritten?: number }).bytesWritten ?? 0) - (request.metricsStartBytes ?? 0));
 
   metricsService.observeHttp(
     request.method,
@@ -49,7 +52,7 @@ const onResponseHook: onResponseHookHandler = (request, reply, done) => {
     routeUrl,
     statusCode,
     durationSeconds,
-    0
+    responseSize
   );
 
   if (request.metricsEndTimer) {
