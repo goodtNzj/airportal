@@ -111,8 +111,8 @@ describe('MetricsService', () => {
 
   describe('Security metrics', () => {
     it('records security block reasons and IP counts', async () => {
-      metricsService.recordSecurityBlock('malicious');
       metricsService.recordSecurityBlock('auto');
+      metricsService.recordSecurityBlock('malicious');
       metricsService.setSecurityIpRecords(123, 5);
 
       metricsService.recordSecurityScan('heuristic-scanner', 'file', 'clean', 0.01);
@@ -121,6 +121,7 @@ describe('MetricsService', () => {
 
       const text = await render();
       expect(text).toContain('airportal_security_blocked_total');
+      expect(text).toContain('reason="auto"');
       expect(text).toContain('reason="malicious"');
       expect(text).toContain('airportal_security_ip_records');
       expect(text).toContain('airportal_security_scans_total');
@@ -166,7 +167,11 @@ describe('MetricsService', () => {
       metricsService.setP2PRooms(3);
       metricsService.setP2PPendingTransfers(4);
       metricsService.recordSignalingMessage('offer', 'forwarded');
-      metricsService.recordSignalingMessage('offer', 'rejected');
+      metricsService.recordSignalingMessage('ice-candidate', 'forwarded');
+      metricsService.recordSignalingMessage('transfer-request', 'forwarded');
+      metricsService.recordSignalingMessage('other', 'error');
+      metricsService.recordP2PWebSocketError('error');
+      metricsService.recordP2PWebSocketError('close_abnormal');
 
       const text = await render();
       expect(text).toContain('airportal_p2p_connections_total');
@@ -174,6 +179,7 @@ describe('MetricsService', () => {
       expect(text).toContain('airportal_p2p_rooms_active');
       expect(text).toContain('airportal_p2p_pending_transfers');
       expect(text).toContain('airportal_p2p_signaling_messages_total');
+      expect(text).toContain('airportal_p2p_websocket_errors_total');
     });
   });
 

@@ -96,6 +96,14 @@ class DiscoveryService {
   getPeerCount(): number {
     return this.peers.size;
   }
+
+  getTransferringCount(): number {
+    let count = 0;
+    for (const peer of this.peers.values()) {
+      if (peer.status === 'transferring') count++;
+    }
+    return count;
+  }
 }
 
 export const discoveryService = new DiscoveryService();

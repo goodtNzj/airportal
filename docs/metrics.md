@@ -117,6 +117,8 @@ location = /metrics {
 > 不会包含动态参数，避免因取件码造成的高基数问题。未匹配路由归一为
 > `unmatched`，状态码归一为 `1xx/2xx/3xx/4xx/5xx` 的 `status_class`，
 > 精确状态码仅出现在 `airportal_http_request_errors_total` 上以控制基数。
+> `response_size_bytes` 使用 `reply.raw.bytesWritten` 在请求开始与结束时的差值
+> 计算，避免 HTTP keep-alive 连接下累积计入的问题。
 
 | 指标 | 类型 | 标签 | 说明 |
 | --- | --- | --- | --- |
@@ -124,7 +126,7 @@ location = /metrics {
 | `airportal_http_request_errors_total` | Counter | `method`, `route`, `status_code` | 状态码 ≥ 400 的响应总数 |
 | `airportal_http_request_duration_seconds` | Histogram | `method`, `route`, `status_class` | 请求耗时（秒） |
 | `airportal_http_requests_in_flight` | Gauge | `method` | 当前正在处理的请求数 |
-| `airportal_http_response_size_bytes` | Histogram | `method`, `route`, `status_class` | 响应体大小（字节） |
+| `airportal_http_response_size_bytes` | Histogram | `method`, `route`, `status_class` | 响应体大小（字节），基于 `reply.raw.bytesWritten` 差值计算 |
 
 **Buckets：**
 
@@ -158,13 +160,18 @@ location = /metrics {
 
 | 指标 | 类型 | 标签 | 说明 |
 | --- | --- | --- | --- |
-| `airportal_security_blocked_total` | Counter | `reason` | 安全子系统触发的拦截计数。`reason` ∈ {auto, malicious, behavior, manual} |
+| `airportal_security_blocked_total` | Counter | `reason` | 安全子系统触发的拦截计数。`reason` ∈ {auto, malicious, behavior, manual}（仅接受联合类型，不可传入任意字符串） |
 | `airportal_security_ip_records` | Gauge | `state` | IP 黑名单池中条目数。`state` ∈ {active, blocked} |
 | `airportal_security_scans_total` | Counter | `plugin`, `verdict` | 安全插件扫描计数。`plugin` ∈ {heuristic-scanner, behavior-tracker}；`verdict` ∈ {clean, suspicious, malicious} |
 | `airportal_security_scan_duration_seconds` | Histogram | `plugin`, `target_type` | 扫描耗时（秒） |
 | `airportal_security_plugin_errors_total` | Counter | `plugin`, `op` | 插件执行错误。`op` ∈ {scanFile, scanText, init, shutdown} |
 | `airportal_file_validation_total` | Counter | `result`, `reason` | Magic number 文件校验结果。`result` ∈ {accept, reject}；`reason` ∈ {mismatch, dangerous, ok} |
-| `airportal_rate_limit_rejections_total` | Counter | `scope` | 限流拒绝。`scope` ∈ {global, upload, auth, ip_management} |
+| `airportal_rate_limit_rejections_total` | Counter | `scope` | 限流拒绝。`scope` ∈ {global, upload, auth, ip_management}。全局限流记录为 `global`；上传端点限流记录为 `upload`；认证端点限流记录为 `auth`；IP 管理端点限流记录为 `ip_management` |
+
+**高基数防护说明：**
+
+- `reason`（security_blocked）：使用联合类型 `'auto' | 'malicious' | 'behavior' | 'manual'`，不可传入任意字符串
+- `type`（p2p_signaling_messages）：使用联合类型，未知消息类型归一为 `other`，防止客户端发送任意类型造成标签爆炸
 
 **Buckets：**
 
@@ -197,10 +204,11 @@ location = /metrics {
 | 指标 | 类型 | 标签 | 说明 |
 | --- | --- | --- | --- |
 | `airportal_p2p_connections_total` | Counter | `result` | WS 连接尝试结果。`result` ∈ {accepted, rejected_blocked, rejected_origin, rejected_auth, rejected_limit, rejected_other} |
-| `airportal_p2p_connections_active` | Gauge | `state` | 当前活跃连接数。`state` ∈ {total, transferring} |
+| `airportal_p2p_connections_active` | Gauge | `state` | 当前活跃连接数。`state` ∈ {total, transferring}（transferring 通过 discovery 服务实时统计正在传输中的连接） |
 | `airportal_p2p_rooms_active` | Gauge | `state` | 当前活跃房间数（state=active） |
-| `airportal_p2p_signaling_messages_total` | Counter | `type`, `result` | 信令消息。`type` 为消息类型（offer/answer/ice-candidate/transfer-request/...）；`result` ∈ {forwarded, rejected, error} |
+| `airportal_p2p_signaling_messages_total` | Counter | `type`, `result` | 信令消息。`type` ∈ {offer, answer, ice-candidate, transfer-request, transfer-accept, transfer-reject, other}；`result` ∈ {forwarded, rejected, error} |
 | `airportal_p2p_pending_transfers` | Gauge | `state` | 待处理的 P2P 传输请求数（state=pending） |
+| `airportal_p2p_websocket_errors_total` | Counter | `type` | P2P WebSocket 错误计数。`type` ∈ {close_abnormal, error, parse_error} |
 
 ---
 
@@ -276,6 +284,20 @@ groups:
         labels: { severity: info }
         annotations:
           summary: "More than 100 IPs currently blocked"
+
+      - alert: AirPortalP2PWebSocketErrors
+        expr: increase(airportal_p2p_websocket_errors_total[5m]) > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "High rate of P2P WebSocket errors"
+
+      - alert: AirPortalRateLimitSurge
+        expr: increase(airportal_rate_limit_rejections_total[5m]) > 50
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Rate limit rejections spiking ({{ $labels.scope }} scope)"
 ```
 
 ---
@@ -297,6 +319,8 @@ groups:
 - 错误率：`sum by (status_class) (rate(airportal_http_request_errors_total[1m]))` (Stacked)
 - 耗时分布：`histogram_quantile(0.95/0.99, sum by (le, route) (rate(airportal_http_request_duration_seconds_bucket[5m])))` (TimeSeries)
 - 状态码分布：`sum by (status_class) (rate(airportal_http_requests_total[1m]))` (Pie)
+- 响应大小 P95：`histogram_quantile(0.95, sum by (le, route) (rate(airportal_http_response_size_bytes_bucket[5m])))` (TimeSeries)
+- 限流拒绝：`sum by (scope) (rate(airportal_rate_limit_rejections_total[5m]))` (TimeSeries)
 
 ### Transfers
 
@@ -320,6 +344,8 @@ groups:
 - 清理成功率：`rate(airportal_cleanup_runs_total{result="success"}[1h]) / rate(airportal_cleanup_runs_total[1h])`
 - P2P 连接：`airportal_p2p_connections_active` (TimeSeries)
 - P2P 房间：`airportal_p2p_rooms_active` (Stat)
+- P2P 传输中连接：`airportal_p2p_connections_active{state="transferring"}` (Stat)
+- P2P WebSocket 错误：`sum by (type) (rate(airportal_p2p_websocket_errors_total[5m]))` (TimeSeries)
 
 ---
 
@@ -339,3 +365,15 @@ METRICS_ENABLED=false pnpm dev
 如需扩展指标，建议参考 `src/services/metrics.service.ts` 集中定义，
 并在路由/服务中调用 `metricsService.xxx(...)`。新增指标务必避免高基数
 标签（如：取件码、用户名、IP、原始 URL）。
+
+**高基数防护实践：**
+
+- 所有标签值使用有限枚举（联合类型），不接收任意字符串：
+  - `route`：使用 Fastify 路由模板归一化，未匹配路由归类为 `unmatched`
+  - `status_class`：归一为 `1xx/2xx/3xx/4xx/5xx`，精确状态码仅用于 `http_request_errors_total`
+  - `reason`（security_blocked）：联合类型 `{auto, malicious, behavior, manual}`
+  - `type`（p2p_signaling_messages）：联合类型，未知消息归一为 `other`
+  - `scope`（rate_limit_rejections）：全局 `onExceeded` 回调中按 URL 前缀自动归类
+- 不使用 IP、取件码、用户名等唯一性标识作为标签
+- Gauge 类指标（`p2p_connections_active`、`transfers_active`）通过 15 秒定时刷新，
+  不会因标签组合数增长而膨胀

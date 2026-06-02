@@ -135,7 +135,7 @@ class IPBlacklistService {
     }
 
     if (!wasBlocked) {
-      const reasonLabel = reason.startsWith('自动封禁') ? 'auto' : reason.startsWith('malicious') ? 'malicious' : reason.startsWith('behavior') ? 'behavior' : 'manual';
+      const reasonLabel: 'auto' | 'malicious' | 'behavior' | 'manual' = reason.startsWith('自动封禁') ? 'auto' : reason.startsWith('malicious') ? 'malicious' : reason.startsWith('behavior') ? 'behavior' : 'manual';
       metricsService.recordSecurityBlock(reasonLabel);
     }
     metricsService.setSecurityIpRecords(this.ipRecords.size, this.blockedIPs.size);
