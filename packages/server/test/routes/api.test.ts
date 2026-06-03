@@ -94,7 +94,7 @@ vi.mock('../../src/services/config.service.js', () => ({
     },
     log: { level: 'error', file: '' },
     cors: { origins: ['http://localhost:5173'] },
-    metrics: { enabled: false, path: '/metrics', collectNode: false, publicAccess: false },
+    metrics: { enabled: false, path: '/metrics', collectNode: false, publicAccess: false, token: '' },
   }),
 }));
 

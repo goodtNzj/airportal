@@ -15,41 +15,49 @@
 | `metrics.enabled` | `METRICS_ENABLED` | `true` | 是否启用指标导出 |
 | `metrics.path` | `METRICS_PATH` | `/metrics` | 指标暴露路径 |
 | `metrics.collectNode` | `METRICS_COLLECT_NODE` | `true` | 是否同时采集 Node.js 运行时指标（CPU/内存/Event Loop/GC） |
-| `metrics.publicAccess` | `METRICS_PUBLIC` | `false` | 是否允许公开访问（公网部署请配合 nginx ACL 限制来源 IP） |
+| `metrics.publicAccess` | `METRICS_PUBLIC` | `false` | 是否允许公开访问；`false` 时仅内网 IP 或携带有效 Token 可访问 |
+| `metrics.token` | `METRICS_TOKEN` | `""` | 访问 Token，设非空后可通过 `Authorization: Bearer <token>` 或 `?token=<token>` 远程访问 |
 
 ### 抓取示例
 
 ```bash
-# 本机直接抓取
+# 本机直接抓取（内网 IP 自动放行）
 curl http://localhost:3000/metrics
 
-# Prometheus scrape config
+# 远程抓取（需配置 token）
+curl -H "Authorization: Bearer <token>" http://your-host:3000/metrics
+
+# 或通过 query parameter
+curl "http://your-host:3000/metrics?token=<token>"
+
+# Prometheus scrape config（远程抓取时）
 scrape_configs:
   - job_name: airportal
     metrics_path: /metrics
     static_configs:
       - targets: ['airportal-node:3000']
+    authorization:
+      credentials: <token>
 ```
 
-### 公网部署的安全建议
+### 访问控制说明
 
-`/metrics` 端点默认对所有可达客户端开放，可能泄露内部信息（如 API 路径
-频次、错误码分布）。建议在反向上做访问控制：
+`publicAccess: false`（默认）时，`/metrics` 端点自动执行以下检查：
 
-```nginx
-location = /metrics {
-    # 仅允许内部 Prometheus 访问
-    allow 10.0.0.0/8;
-    allow 172.16.0.0/12;
-    deny  all;
+1. **内网 IP 放行** — 请求来源为以下 IP 段时直接放行：
+   - `127.0.0.1`, `::1`（本机）
+   - `10.0.0.0/8`
+   - `172.16.0.0/12`
+   - `192.168.0.0/16`
+   - IPv6 链路本地（`fe80::/10`）和唯一本地地址（`fc00::/7`）
 
-    proxy_pass http://node_app;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    access_log off;
-}
-```
+2. **Token 验证** — 当 `metrics.token` 非空时，可通过以下方式远程访问：
+   - HTTP 头：`Authorization: Bearer <token>`
+   - 查询参数：`?token=<token>`
+
+3. 不满足以上条件时返回 403 Forbidden。
+
+> 注意：IP 检查依赖 `request.ip`，确保 `TRUST_PROXY=true` 已设置（如果使用了反向代理）。
 
 ---
 
