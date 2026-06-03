@@ -7,6 +7,7 @@ import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import net from 'net';
 import { initConfig, getConfig } from './config/index.js';
 import { routes } from './routes/index.js';
 import { transferService } from './services/transfer.service.js';
@@ -21,6 +22,31 @@ import { metricsRefreshService } from './services/metrics-refresh.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV !== 'production';
+
+/**
+ * 检查 IP 是否为私有/内网地址
+ */
+function isPrivateIP(ip: string): boolean {
+  if (net.isIPv6(ip)) {
+    const normalized = ip.toLowerCase();
+    if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
+    if (normalized.startsWith('fe80:')) return true;
+    if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+    return false;
+  }
+
+  if (ip === '127.0.0.1' || ip === 'localhost' || ip === '0.0.0.0') return true;
+
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(isNaN)) return false;
+
+  if (parts[0] === 10) return true;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  if (parts[0] === 127) return true;
+
+  return false;
+}
 
 export async function buildApp() {
   const config = getConfig();
@@ -88,7 +114,22 @@ export async function buildApp() {
     await registerMetricsHooks(app);
 
     const metricsPath = config.metrics?.path || '/metrics';
-    app.get(metricsPath, async (_request, reply) => {
+    const metricsConfig = config.metrics;
+    app.get(metricsPath, async (request, reply) => {
+      if (metricsConfig && !metricsConfig.publicAccess) {
+        const ip = request.ip;
+        const authHeader = request.headers.authorization;
+        const tokenParam = (request.query as Record<string, string>).token;
+        const token = metricsConfig.token;
+
+        const hasValidToken = token && (authHeader === `Bearer ${token}` || tokenParam === token);
+        const isPrivate = isPrivateIP(ip);
+
+        if (!isPrivate && !hasValidToken) {
+          return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: '访问被拒绝' } });
+        }
+      }
+
       try {
         const text = await metricsService.render();
         const ct = await metricsService.contentType();

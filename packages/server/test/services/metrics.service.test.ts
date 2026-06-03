@@ -11,7 +11,7 @@ vi.mock('../../src/services/logger.service.js', () => ({
 
 vi.mock('../../src/config/index.js', () => ({
   getConfig: () => ({
-    metrics: { enabled: true, path: '/metrics', collectNode: false, publicAccess: false },
+    metrics: { enabled: true, path: '/metrics', collectNode: false, publicAccess: false, token: '' },
   }),
 }));
 

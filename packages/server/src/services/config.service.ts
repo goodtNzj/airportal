@@ -133,6 +133,7 @@ export interface AppConfig {
     path: string;
     collectNode: boolean;
     publicAccess: boolean;
+    token: string;
   };
 }
 
@@ -367,6 +368,7 @@ export async function initConfig(): Promise<AppConfig> {
       path: getValue('METRICS_PATH', configFile?.metrics?.path, '/metrics'),
       collectNode: getValue('METRICS_COLLECT_NODE', configFile?.metrics?.collectNode, true, (v) => v !== 'false'),
       publicAccess: getValue('METRICS_PUBLIC', configFile?.metrics?.publicAccess, false, (v) => v === 'true'),
+      token: getValue('METRICS_TOKEN', configFile?.metrics?.token, ''),
     },
   };
 
