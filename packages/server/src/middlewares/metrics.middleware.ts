@@ -27,7 +27,6 @@ function getRouteUrl(request: FastifyRequest): string | undefined {
 
 const onRequestHook: onRequestHookHandler = (request, _reply, done) => {
   if (!metricsService.isEnabled()) return done();
-  if (request.url.startsWith('/metrics')) return done();
   request.metricsStartTime = process.hrtime.bigint();
   request.metricsEndTimer = metricsService.startHttp(request.method);
   request.metricsStartBytes = (_reply.raw as unknown as { bytesWritten?: number }).bytesWritten ?? 0;
@@ -36,7 +35,6 @@ const onRequestHook: onRequestHookHandler = (request, _reply, done) => {
 
 const onResponseHook: onResponseHookHandler = (request, reply, done) => {
   if (!metricsService.isEnabled()) return done();
-  if (request.url.startsWith('/metrics')) return done();
   const start = request.metricsStartTime;
   if (!start) return done();
 

@@ -45,6 +45,14 @@ describe('MetricsService', () => {
       expect(text).toContain('status_class="4xx"');
     });
 
+    it('normalizes /metrics scrape requests', async () => {
+      metricsService.observeHttp('GET', '/metrics', '/metrics', 200, 0.005, 4096);
+
+      const text = await render();
+      expect(text).toContain('route="/metrics"');
+      expect(text).toContain('status_class="2xx"');
+    });
+
     it('does not record errors as request errors when no error status', async () => {
       metricsService.observeHttp('GET', '/api/health', '/api/health', 200, 0.001, 0);
       const text = await render();
