@@ -351,6 +351,10 @@ class SignalingService {
   setRequestTimeout(timeoutMs: number): void {
     this.requestTimeout = timeoutMs;
   }
+
+  getPendingTransferCount(): number {
+    return this.pendingTransfers.size;
+  }
 }
 
 export const signalingService = new SignalingService();
