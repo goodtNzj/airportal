@@ -92,11 +92,11 @@
     "level": "info",
     "file": "/app/logs/airportal.log",
     "rotation": {
-      "enabled": false,
-      "interval": 0,
+      "enabled": true,
+      "interval": 3600,
       "maxSize": 10485760,
-      "maxFiles": 5,
-      "compress": false
+      "maxFiles": 168,
+      "compress": true
     }
   },
   "p2p": {

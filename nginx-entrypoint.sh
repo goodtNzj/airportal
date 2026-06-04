@@ -42,6 +42,6 @@ echo "Web dist ready."
         nginx -s reopen 2>/dev/null || true
 
         # Delete logs older than 3 days (72 files at hourly rotation)
-        find /var/log/nginx -name "*.log.gz" -mtime +3 -delete 2>/dev/null
+        find /var/log/nginx -name "*.log.gz" -mtime +2 -delete 2>/dev/null
     done
 ) &
