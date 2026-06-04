@@ -1,4 +1,5 @@
 import { logger } from './logger.service.js';
+import { metricsService } from './metrics.service.js';
 
 // 常见文件类型的 Magic Number（文件头签名）
 const FILE_SIGNATURES: Record<string, { signature: Buffer; offset: number; mask?: Buffer }> = {
@@ -135,6 +136,7 @@ export class FileValidationService {
 
     if (isDangerousByMagic || (!detectedMimeType && isDangerousByExtension)) {
       logger.warn('Dangerous file detected', { filename, detectedMimeType, declaredMimeType, ext });
+      metricsService.recordFileValidation('reject', 'dangerous');
       return {
         valid: false,
         detectedMimeType: detectedMimeType ?? undefined,
@@ -149,6 +151,7 @@ export class FileValidationService {
       // 某些类型可能是同源的（如 docx 和 zip）
       if (!this.isCompatibleMimeType(detectedMimeType, declaredMimeType)) {
         logger.warn('MIME type mismatch', { filename, detectedMimeType, declaredMimeType });
+        metricsService.recordFileValidation('reject', 'mismatch');
         return {
           valid: false,
           detectedMimeType,
@@ -166,6 +169,7 @@ export class FileValidationService {
       // 不阻止上传，但记录警告
     }
 
+    metricsService.recordFileValidation('accept', 'ok');
     return {
       valid: true,
       detectedMimeType: detectedMimeType || declaredMimeType,

@@ -20,6 +20,7 @@ export function registerViteHook(app: FastifyInstance): void {
 
   app.addHook('onRequest', async (request, reply) => {
     if (request.url.startsWith('/api/')) return;
+    if (request.url === '/metrics' || request.url.startsWith('/metrics?')) return;
     if (!viteServer) {
       return reply.status(503).send({
         success: false,

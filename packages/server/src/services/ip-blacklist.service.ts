@@ -1,5 +1,6 @@
 import { getConfig } from '../config/index.js';
 import { logger } from './logger.service.js';
+import { metricsService } from './metrics.service.js';
 
 interface IPRecord {
   ip: string;
@@ -125,12 +126,19 @@ class IPBlacklistService {
     }
 
     const config = getConfig();
+    const wasBlocked = this.blockedIPs.has(ip);
     this.blockedIPs.add(ip);
     const record = this.ipRecords.get(ip);
     if (record) {
       record.blockedAt = new Date();
       record.blockReason = reason;
     }
+
+    if (!wasBlocked) {
+      const reasonLabel = reason.startsWith('自动封禁') ? 'auto' : reason.startsWith('malicious') ? 'malicious' : reason.startsWith('behavior') ? 'behavior' : 'manual';
+      metricsService.recordSecurityBlock(reasonLabel);
+    }
+    metricsService.setSecurityIpRecords(this.ipRecords.size, this.blockedIPs.size);
 
     logger.warn('IP blocked', { ip, reason, duration });
 
@@ -163,6 +171,7 @@ class IPBlacklistService {
       record.blockedAt = undefined;
       record.blockReason = undefined;
     }
+    metricsService.setSecurityIpRecords(this.ipRecords.size, this.blockedIPs.size);
     logger.info('IP unblocked', { ip });
   }
 
@@ -203,6 +212,10 @@ class IPBlacklistService {
       blockedCount: this.blockedIPs.size,
       topFailedIPs,
     };
+  }
+
+  publishMetrics(): void {
+    metricsService.setSecurityIpRecords(this.ipRecords.size, this.blockedIPs.size);
   }
 
   shutdown(): void {
