@@ -52,14 +52,8 @@ export async function initViteDev(_app: FastifyInstance): Promise<void> {
 
     const webRoot = path.resolve(__dirname, '../../web');
 
-    // IMPORTANT: @fastify/websocket installs a global `upgrade` listener on
-    // fastify.server that hijacks every WebSocket handshake. If Vite HMR
-    // shared the same server, its upgrade would be routed to the Fastify
-    // 404 handler and the socket destroyed, causing the HMR client to
-    // reload the page in a loop (the browser flickering).
-    //
-    // Use a dedicated HTTP server for HMR on a separate port so the two
-    // subsystems don't fight over the upgrade event.
+    // Use a dedicated HTTP server for HMR on a separate port so the WebSocket
+    // upgrade event doesn't conflict with the main Fastify server's routing.
     hmrServer = createHttpServer();
     const hmrPort = await new Promise<number>((resolve, reject) => {
       hmrServer!.once('error', reject);
