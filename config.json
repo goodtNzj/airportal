@@ -99,16 +99,6 @@
       "compress": false
     }
   },
-  "p2p": {
-    "enabled": true,
-    "maxFileSize": 524288000,
-    "maxConcurrentTransfers": 3,
-    "requestTimeout": 60000,
-    "iceServers": [
-      { "urls": "stun:stun.l.google.com:19302" },
-      { "urls": "stun:stun1.l.google.com:19302" }
-    ]
-  },
   "metrics": {
     "enabled": true,
     "path": "/metrics",

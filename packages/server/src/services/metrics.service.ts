@@ -39,8 +39,6 @@ function normalizeRoute(rawUrl: string, routeUrl?: string): string {
     path === '/api/auth/logout' ||
     path === '/api/auth/me' ||
     path === '/api/transfers/history' ||
-    path === '/api/p2p/status' ||
-    path === '/api/p2p/ice-servers' ||
     path === '/api/security/ip/stats' ||
     path === '/api/security/ip/blocked'
   ) {
@@ -103,14 +101,6 @@ class MetricsService {
   readonly cleanupDurationSeconds: Histogram<string>;
   readonly cleanupItemsTotal: Counter<'type' | 'result'>;
   readonly cleanupLastSuccessTimestamp: Gauge<string>;
-
-  // P2P / WebSocket metrics
-  readonly p2pConnectionsTotal: Counter<'result'>;
-  readonly p2pConnectionsActive: Gauge<string>;
-  readonly p2pRoomsActive: Gauge<string>;
-  readonly p2pSignalingMessages: Counter<'type' | 'result'>;
-  readonly p2pPendingTransfers: Gauge<string>;
-  readonly p2pWebSocketErrors: Counter<'type'>;
 
   // Storage metrics
   readonly storageBytes: Gauge<string>;
@@ -287,48 +277,6 @@ class MetricsService {
     this.cleanupLastSuccessTimestamp = new Gauge({
       name: 'airportal_cleanup_last_success_timestamp_seconds',
       help: 'Unix timestamp (seconds) of the last successful cleanup run.',
-      registers: [this.registry],
-    });
-
-    this.p2pConnectionsTotal = new Counter({
-      name: 'airportal_p2p_connections_total',
-      help: 'Total P2P WebSocket connection attempts by result.',
-      labelNames: ['result'] as const,
-      registers: [this.registry],
-    });
-
-    this.p2pConnectionsActive = new Gauge({
-      name: 'airportal_p2p_connections_active',
-      help: 'Currently active P2P WebSocket connections.',
-      labelNames: ['state'] as const,
-      registers: [this.registry],
-    });
-
-    this.p2pRoomsActive = new Gauge({
-      name: 'airportal_p2p_rooms_active',
-      help: 'Current number of active P2P rooms.',
-      labelNames: ['state'] as const,
-      registers: [this.registry],
-    });
-
-    this.p2pSignalingMessages = new Counter({
-      name: 'airportal_p2p_signaling_messages_total',
-      help: 'P2P signaling messages by type and outcome.',
-      labelNames: ['type', 'result'] as const,
-      registers: [this.registry],
-    });
-
-    this.p2pPendingTransfers = new Gauge({
-      name: 'airportal_p2p_pending_transfers',
-      help: 'Currently pending P2P transfer requests.',
-      labelNames: ['state'] as const,
-      registers: [this.registry],
-    });
-
-    this.p2pWebSocketErrors = new Counter({
-      name: 'airportal_p2p_websocket_errors_total',
-      help: 'Total P2P WebSocket connection errors by type.',
-      labelNames: ['type'] as const,
       registers: [this.registry],
     });
 
@@ -594,37 +542,6 @@ class MetricsService {
     this.storageFiles.set({ type: 'file' }, countByType.file);
     this.storageFiles.set({ type: 'folder' }, countByType.folder);
     this.storageFiles.set({ type: 'text' }, countByType.text);
-  }
-
-  setP2PConnections(active: number, transferring: number): void {
-    if (!this.enabled) return;
-    this.p2pConnectionsActive.set({ state: 'total' }, active);
-    this.p2pConnectionsActive.set({ state: 'transferring' }, transferring);
-  }
-
-  setP2PRooms(active: number): void {
-    if (!this.enabled) return;
-    this.p2pRoomsActive.set({ state: 'active' }, active);
-  }
-
-  setP2PPendingTransfers(pending: number): void {
-    if (!this.enabled) return;
-    this.p2pPendingTransfers.set({ state: 'pending' }, pending);
-  }
-
-  recordP2PConnection(result: 'accepted' | 'rejected_blocked' | 'rejected_origin' | 'rejected_auth' | 'rejected_limit' | 'rejected_other'): void {
-    if (!this.enabled) return;
-    this.p2pConnectionsTotal.inc({ result });
-  }
-
-  recordP2PWebSocketError(type: 'close_abnormal' | 'error' | 'parse_error'): void {
-    if (!this.enabled) return;
-    this.p2pWebSocketErrors.inc({ type });
-  }
-
-  recordSignalingMessage(type: 'offer' | 'answer' | 'ice-candidate' | 'transfer-request' | 'transfer-accept' | 'transfer-reject' | 'other', result: 'forwarded' | 'rejected' | 'error'): void {
-    if (!this.enabled) return;
-    this.p2pSignalingMessages.inc({ type, result });
   }
 
   setTransferStats(stats: { active: number; expired: number }): void {

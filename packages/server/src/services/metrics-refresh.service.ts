@@ -1,9 +1,6 @@
 import { prisma } from './prisma.service.js';
 import { metricsService } from './metrics.service.js';
 import { ipBlacklistService } from './ip-blacklist.service.js';
-import { discoveryService } from './discovery.service.js';
-import { roomService } from './room.service.js';
-import { signalingService } from './signaling.service.js';
 import { logger } from './logger.service.js';
 
 const DEFAULT_REFRESH_MS = 15_000;
@@ -52,7 +49,6 @@ class MetricsRefreshService {
       await Promise.all([
         this.refreshTransferStats(),
         this.refreshSecurityStats(),
-        this.refreshP2PStats(),
       ]);
     } finally {
       this.running = false;
@@ -94,25 +90,6 @@ class MetricsRefreshService {
       ipBlacklistService.publishMetrics();
     } catch (err) {
       logger.debug('refreshSecurityStats failed', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  private refreshP2PStats(): void {
-    try {
-      const total = discoveryService.getPeerCount();
-      const transferring = discoveryService.getTransferringCount();
-      metricsService.setP2PConnections(total, transferring);
-      metricsService.setP2PRooms(roomService.getRoomCount());
-      // Pending P2P transfers live inside signalingService
-      const pending = (signalingService as unknown as { pendingTransfers?: Map<string, unknown> })
-        .pendingTransfers?.size;
-      if (typeof pending === 'number') {
-        metricsService.setP2PPendingTransfers(pending);
-      }
-    } catch (err) {
-      logger.debug('refreshP2PStats failed', {
         error: err instanceof Error ? err.message : String(err),
       });
     }

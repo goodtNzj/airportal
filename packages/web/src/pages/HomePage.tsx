@@ -42,25 +42,6 @@ export function HomePage() {
         </Link>
       </div>
 
-      {/* P2P Entry */}
-      <div className="mb-8">
-        <Link
-          to="/p2p"
-          className="inline-flex items-center gap-2 px-6 py-3 bg-[#c6613f] text-white rounded-xl hover:bg-[#d97757] transition-colors font-medium"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"
-            />
-          </svg>
-          P2P 直传
-        </Link>
-        <p className="text-sm text-[#91908a] mt-2">通过房间号实现设备间直接传输，无需经过服务器</p>
-      </div>
-
       <div className="text-sm text-[#91908a] space-y-1">
         <p>无需登录即可使用</p>
         {user && <p>登录后可查看传输历史</p>}

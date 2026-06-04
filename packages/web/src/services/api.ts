@@ -17,7 +17,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       useStore.getState().logout();
       window.dispatchEvent(new CustomEvent('auth:logout'));
-      if (!window.location.pathname.includes('/p2p')) {
+      if (window.location.pathname !== '/') {
         window.location.href = '/';
       }
     }
@@ -144,13 +144,6 @@ export const transferApi = {
       }
     }
     return { blob: res.data as Blob, filename };
-  },
-};
-
-export const p2pApi = {
-  getICEServers: async (): Promise<RTCIceServer[]> => {
-    const res = await api.get<{ success: boolean; data: { iceServers: RTCIceServer[] } }>('/p2p/ice-servers');
-    return res.data.data.iceServers;
   },
 };
 

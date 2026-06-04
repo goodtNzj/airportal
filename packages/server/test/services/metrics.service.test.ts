@@ -166,31 +166,6 @@ describe('MetricsService', () => {
     });
   });
 
-  describe('P2P metrics', () => {
-    it('records P2P connection results and active gauges', async () => {
-      metricsService.recordP2PConnection('accepted');
-      metricsService.recordP2PConnection('rejected_blocked');
-      metricsService.recordP2PConnection('rejected_origin');
-      metricsService.setP2PConnections(10, 2);
-      metricsService.setP2PRooms(3);
-      metricsService.setP2PPendingTransfers(4);
-      metricsService.recordSignalingMessage('offer', 'forwarded');
-      metricsService.recordSignalingMessage('ice-candidate', 'forwarded');
-      metricsService.recordSignalingMessage('transfer-request', 'forwarded');
-      metricsService.recordSignalingMessage('other', 'error');
-      metricsService.recordP2PWebSocketError('error');
-      metricsService.recordP2PWebSocketError('close_abnormal');
-
-      const text = await render();
-      expect(text).toContain('airportal_p2p_connections_total');
-      expect(text).toContain('airportal_p2p_connections_active');
-      expect(text).toContain('airportal_p2p_rooms_active');
-      expect(text).toContain('airportal_p2p_pending_transfers');
-      expect(text).toContain('airportal_p2p_signaling_messages_total');
-      expect(text).toContain('airportal_p2p_websocket_errors_total');
-    });
-  });
-
   describe('Storage metrics', () => {
     it('records storage bytes and file count by type', async () => {
       metricsService.setStorageStats({ file: 1024, folder: 2048, text: 256 }, { file: 5, folder: 1, text: 10 });
