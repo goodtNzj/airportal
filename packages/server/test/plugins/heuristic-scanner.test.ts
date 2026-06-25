@@ -136,41 +136,138 @@ describe('HeuristicScanner', () => {
     });
   });
 
-  describe('binary content detection (latin1)', () => {
-    it('should detect eval pattern in binary data', async () => {
-      // Embed eval in binary-like data (alternating null bytes)
-      const binary = Buffer.alloc(256);
-      binary.write('eval("alert(1)")', 50);
-      const result = await scanner.scanFile(binary, {
-        filename: 'document.pdf',
+  describe('binary format detection (skip regex scan)', () => {
+    it('should NOT flag eval() embedded in a real PDF buffer', async () => {
+      // Build a buffer that starts with PDF magic bytes and contains eval(
+      const pdf = Buffer.alloc(512);
+      pdf.write('%PDF-1.4', 0); // PDF magic bytes
+      pdf.write('eval(event.value)', 100); // typical PDF form field JS
+      pdf.write('exec', 200); // typical xref stream byte sequence
+
+      const result = await scanner.scanFile(pdf, {
+        filename: 'form.pdf',
         mimetype: 'application/pdf',
-        size: binary.length,
+        size: pdf.length,
+      });
+
+      // Regex scan should be skipped for PDF format
+      expect(result.reasons.some((r) => r.includes('code_exec'))).toBe(false);
+      expect(result.reasons.some((r) => r.includes('shell_exec'))).toBe(false);
+      // Should not be marked malicious
+      expect(result.verdict).not.toBe('malicious');
+    });
+
+    it('should NOT flag patterns in a ZIP/Office buffer', async () => {
+      const zip = Buffer.alloc(256);
+      zip[0] = 0x50; zip[1] = 0x4B; zip[2] = 0x03; zip[3] = 0x04; // PK magic
+      zip.write('eval("xss")', 50);
+      zip.write('<script>alert(1)</script>', 100);
+
+      const result = await scanner.scanFile(zip, {
+        filename: 'report.docx',
+        mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: zip.length,
+      });
+
+      expect(result.reasons.some((r) => r.includes('code_exec'))).toBe(false);
+      expect(result.reasons.some((r) => r.includes('xss_vector'))).toBe(false);
+    });
+
+    it('should NOT flag patterns in a PNG buffer', async () => {
+      const png = Buffer.alloc(256);
+      png[0] = 0x89; png[1] = 0x50; png[2] = 0x4E; png[3] = 0x47; // PNG magic
+      png.write('eval()', 50);
+
+      const result = await scanner.scanFile(png, {
+        filename: 'image.png',
+        mimetype: 'image/png',
+        size: png.length,
+      });
+
+      expect(result.reasons.some((r) => r.includes('code_exec'))).toBe(false);
+    });
+
+    it('should still flag eval() when buffer has NO recognized magic bytes', async () => {
+      // Buffer without any known magic bytes — regex scan should proceed
+      const buf = Buffer.alloc(256);
+      buf.write('eval("alert(1)")', 50);
+
+      const result = await scanner.scanFile(buf, {
+        filename: 'document.pdf', // filename is ignored; magic bytes are checked
+        mimetype: 'application/pdf',
+        size: buf.length,
+      });
+
+      // No magic bytes → regex scan runs → eval detected
+      expect(result.reasons.some((r) => r.includes('code_exec'))).toBe(true);
+    });
+
+    it('should still run entropy analysis on binary formats', async () => {
+      // High-entropy PDF-like buffer
+      const pdf = Buffer.alloc(4096);
+      pdf.write('%PDF-1.4', 0);
+      for (let i = 10; i < pdf.length; i++) {
+        pdf[i] = (i * 17 + 31) % 256;
+      }
+
+      const result = await scanner.scanFile(pdf, {
+        filename: 'encrypted.pdf',
+        mimetype: 'application/pdf',
+        size: pdf.length,
+      });
+
+      // Entropy check still applies even for binary formats
+      expect(result.details?.entropy).toBeDefined();
+    });
+
+    it('should still detect extension mismatch for binary formats', async () => {
+      // MZ (PE executable) header pretending to be PDF
+      const fake = Buffer.alloc(64);
+      fake[0] = 0x4D; fake[1] = 0x5A; // MZ
+
+      const result = await scanner.scanFile(fake, {
+        filename: 'invoice.pdf',
+        mimetype: 'application/pdf',
+        size: fake.length,
+      });
+
+      expect(result.reasons.some((r) => r.includes('可执行文件头'))).toBe(true);
+    });
+  });
+
+  describe('binary content detection (non-binary formats)', () => {
+    it('should detect eval pattern in non-binary buffer', async () => {
+      const buf = Buffer.alloc(256);
+      buf.write('eval("alert(1)")', 50);
+      const result = await scanner.scanFile(buf, {
+        filename: 'script.js',
+        mimetype: 'application/javascript',
+        size: buf.length,
       });
       expect(result.reasons.some((r) => r.includes('code_exec'))).toBe(true);
     });
 
-    it('should detect powershell in binary data', async () => {
-      const binary = Buffer.alloc(512);
-      binary.write('powershell -Command Invoke-Expression', 100);
-      const result = await scanner.scanFile(binary, {
-        filename: 'file.doc',
-        mimetype: 'application/msword',
-        size: binary.length,
+    it('should detect powershell in non-binary buffer', async () => {
+      const buf = Buffer.alloc(512);
+      buf.write('powershell -Command Invoke-Expression', 100);
+      const result = await scanner.scanFile(buf, {
+        filename: 'script.ps1',
+        mimetype: 'text/plain',
+        size: buf.length,
       });
       expect(result.reasons.some((r) => r.includes('powershell'))).toBe(true);
     });
 
-    it('should not flag clean binary data', async () => {
-      const binary = Buffer.alloc(1024);
+    it('should not flag clean non-binary buffer', async () => {
+      const buf = Buffer.alloc(1024);
       for (let i = 0; i < 1024; i++) {
-        binary[i] = i % 256;
+        buf[i] = i % 256;
       }
-      const result = await scanner.scanFile(binary, {
+      const result = await scanner.scanFile(buf, {
         filename: 'random.bin',
         mimetype: 'application/octet-stream',
-        size: binary.length,
+        size: buf.length,
       });
-      // No pattern match, entropy may add some risk
       expect(result.riskScore).toBeLessThan(70);
     });
   });

@@ -75,8 +75,7 @@ export const transferApi = {
 
     const res = await api.post<{ success: boolean; data: TransferResult }>(
       `/transfers?${params.toString()}`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+      formData
     );
     return res.data.data;
   },
@@ -101,8 +100,7 @@ export const transferApi = {
 
     const res = await api.post<{ success: boolean; data: TransferResult }>(
       `/transfers?${params.toString()}`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+      formData
     );
     return res.data.data;
   },

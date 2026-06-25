@@ -77,20 +77,24 @@ export class HeuristicScanner implements SecurityPlugin {
       }
     }
 
-    // Pattern matching — 使用 latin1 编码（逐字节映射，不丢失任何字节）
-    // 确保二进制文件（PDF/DOCX/图片等）中嵌入的恶意文本也能被检测
-    const scanSlice = buffer.subarray(0, Math.min(buffer.length, this.maxScanSize));
-    const textContent = scanSlice.toString('latin1');
-    for (const pattern of this.patterns) {
-      try {
-        const re = pattern.compiled ?? new RegExp(pattern.regex, 'im');
-        if (re.test(textContent)) {
-          riskScore += pattern.weight;
-          reasons.push(`检测到可疑模式: ${pattern.name}`);
-          if (riskScore >= 100) break;
+    // Pattern matching — skip for known binary formats to avoid false positives
+    // PDF, Office docs (ZIP-based), images etc. contain binary streams that match
+    // regex patterns coincidentally (e.g. `eval(` in PDF form fields, `exec` in xref)
+    const isBinaryFormat = detectBinaryFormat(buffer);
+    if (!isBinaryFormat) {
+      const scanSlice = buffer.subarray(0, Math.min(buffer.length, this.maxScanSize));
+      const textContent = scanSlice.toString('latin1');
+      for (const pattern of this.patterns) {
+        try {
+          const re = pattern.compiled ?? new RegExp(pattern.regex, 'im');
+          if (re.test(textContent)) {
+            riskScore += pattern.weight;
+            reasons.push(`检测到可疑模式: ${pattern.name}`);
+            if (riskScore >= 100) break;
+          }
+        } catch {
+          // Skip invalid regex patterns
         }
-      } catch {
-        // Skip invalid regex patterns
       }
     }
 
@@ -173,6 +177,33 @@ function hasExecHeader(buffer: Buffer): boolean {
   if (buffer[0] === 0xce && buffer[1] === 0xfa && buffer[2] === 0xed && buffer[3] === 0xfe) return true; // Mach-O 32
   if (buffer[0] === 0xca && buffer[1] === 0xfe && buffer[2] === 0xba && buffer[3] === 0xbe) return true; // Mach-O fat
   return false;
+}
+
+/**
+ * Detect known binary file formats via magic bytes.
+ * These formats contain binary streams that produce false positives
+ * when scanned with text-based regex patterns.
+ */
+function detectBinaryFormat(buffer: Buffer): string | null {
+  if (buffer.length < 4) return null;
+  // PDF: %PDF
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) return 'pdf';
+  // ZIP-based Office formats (DOCX, XLSX, PPTX, ODT, etc.)
+  if (buffer[0] === 0x50 && buffer[1] === 0x4B && (buffer[2] === 0x03 || buffer[2] === 0x05) && buffer[3] === 0x04) return 'zip/office';
+  // PNG
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'png';
+  // JPEG
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return 'jpeg';
+  // GIF
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return 'gif';
+  // BMP
+  if (buffer[0] === 0x42 && buffer[1] === 0x4D) return 'bmp';
+  // WEBP (RIFF....WEBP)
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+      buffer.length >= 12 && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) return 'webp';
+  // OLE2 Compound Document (legacy DOC, XLS, PPT)
+  if (buffer[0] === 0xD0 && buffer[1] === 0xCF && buffer[2] === 0x11 && buffer[3] === 0xE0) return 'ole2';
+  return null;
 }
 
 export const heuristicScanner = new HeuristicScanner();
