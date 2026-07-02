@@ -346,6 +346,13 @@ class SignalingService {
   }
 
   /**
+   * Get pending transfer count
+   */
+  getPendingTransferCount(): number {
+    return this.pendingTransfers.size;
+  }
+
+  /**
    * Set request timeout
    */
   setRequestTimeout(timeoutMs: number): void {

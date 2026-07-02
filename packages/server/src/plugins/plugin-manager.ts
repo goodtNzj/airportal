@@ -115,6 +115,15 @@ export class PluginManager {
           error: error instanceof Error ? error.message : String(error),
         });
         metricsService.recordSecurityPluginError(plugin.name, 'scanText');
+        // Treat plugin failure as suspicious (consistent with scanFile)
+        results.push({
+          verdict: 'suspicious',
+          riskScore: 50,
+          reasons: [`插件 ${plugin.name} 文本扫描异常`],
+          scannedAt: new Date(),
+          duration: 0,
+        });
+        metricsService.recordSecurityScan(plugin.name, 'text', 'suspicious', 0);
       }
     }
 

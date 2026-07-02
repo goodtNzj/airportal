@@ -131,7 +131,8 @@ export class FileStorageService {
   private assertPathSafe(filePath: string): string {
     const dir = this.getUploadDir();
     const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(path.resolve(dir))) {
+    const resolvedDir = path.resolve(dir) + path.sep;
+    if (resolved !== path.resolve(dir) && !resolved.startsWith(resolvedDir)) {
       logger.error('Path traversal attempt blocked', { requested: filePath, resolved });
       throw new AppError(ErrorCodes.PATH_TRAVERSAL, '文件路径验证失败');
     }

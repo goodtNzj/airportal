@@ -9,6 +9,7 @@ export interface Room {
   createdBy: string;
   peers: Set<string>; // socketIds
   expirySeconds: number;
+  expiryTimer?: ReturnType<typeof setTimeout>;
 }
 
 class RoomService {
@@ -123,6 +124,7 @@ class RoomService {
 
       // Delete room if empty
       if (room.peers.size === 0) {
+        if (room.expiryTimer) clearTimeout(room.expiryTimer);
         this.rooms.delete(roomId);
         logger.info('Room deleted (empty)', { roomId });
       }
@@ -214,9 +216,14 @@ class RoomService {
   private setRoomExpiry(roomId: string): void {
     const room = this.rooms.get(roomId);
     const timeoutMs = (room?.expirySeconds ?? 1800) * 1000;
-    setTimeout(() => {
+    // Clear any existing timer to prevent ghost timers
+    if (room?.expiryTimer) clearTimeout(room.expiryTimer);
+    if (!room) return;
+    const createdAt = room.createdAt.getTime();
+    room.expiryTimer = setTimeout(() => {
       const room = this.rooms.get(roomId);
-      if (room) {
+      // Only expire if this is still the same room instance (same createdAt)
+      if (room && room.createdAt.getTime() === createdAt) {
         for (const peerId of room.peers) {
           discoveryService.sendToPeer(peerId, {
             type: 'room-expired',

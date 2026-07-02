@@ -66,7 +66,9 @@ export async function routes(app: FastifyInstance) {
   app.register(transferRoutes, { prefix: '/transfers' });
 
   // P2P 路由
-  app.register(p2pRoutes, { prefix: '/p2p' });
+  if (config.p2p?.enabled !== false) {
+    app.register(p2pRoutes, { prefix: '/p2p' });
+  }
 
   // IP 黑名单管理路由
   app.register(ipBlacklistRoutes, { prefix: '/security/ip' });

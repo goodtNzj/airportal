@@ -37,20 +37,7 @@
         "maxScanSize": 10485760,
         "rejectRiskThreshold": 70,
         "warnRiskThreshold": 40,
-        "patterns": [
-          { "name": "code_exec", "regex": "eval\\s*\\(", "weight": 30 },
-          { "name": "shell_exec", "regex": "(exec|passthru|shell_exec|popen)\\s*\\(", "weight": 40 },
-          { "name": "system_call", "regex": "(os\\.system|subprocess|child_process)", "weight": 35 },
-          { "name": "powershell", "regex": "(powershell|Invoke-Expression|IEX\\s*\\(|Start-Process)", "weight": 45 },
-          { "name": "cmd_exe", "regex": "cmd\\.exe", "weight": 40 },
-          { "name": "sql_injection", "regex": "(DROP\\s+TABLE|UNION\\s+SELECT|--\\s)", "weight": 35 },
-          { "name": "xss_vector", "regex": "(<script|onerror\\s*=|javascript:)", "weight": 40 },
-          { "name": "destructive_cmd", "regex": "(rm\\s+-rf|del\\s+/f|format\\s+c:)", "weight": 50 },
-          { "name": "base64_decode", "regex": "(base64_decode|atob\\s*\\(|fromCharCode)", "weight": 25 },
-          { "name": "wget_curl_pipe", "regex": "((wget|curl)\\s+.*\\|\\s*(sh|bash))", "weight": 45 },
-          { "name": "reverse_shell", "regex": "(nc\\s+-[e|l]|/dev/tcp|bash\\s+-i\\s+>&)", "weight": 50 },
-          { "name": "obfuscation", "regex": "(unescape\\s*\\(|String\\.fromCharCode|decodeURIComponent)", "weight": 20 }
-        ]
+        "patterns": []
       },
       "behavior": {
         "enabled": true,
@@ -97,6 +84,9 @@
     "maxFileSize": 524288000,
     "maxConcurrentTransfers": 3,
     "requestTimeout": 60000,
-    "description": "P2P 直传配置 - 通过房间号实现设备间直接文件传输"
+    "iceServers": [
+      { "urls": "stun:stun.l.google.com:19302" },
+      { "urls": "stun:stun1.l.google.com:19302" }
+    ]
   }
 }

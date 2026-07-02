@@ -105,12 +105,7 @@ class MetricsRefreshService {
       const transferring = discoveryService.getTransferringCount();
       metricsService.setP2PConnections(total, transferring);
       metricsService.setP2PRooms(roomService.getRoomCount());
-      // Pending P2P transfers live inside signalingService
-      const pending = (signalingService as unknown as { pendingTransfers?: Map<string, unknown> })
-        .pendingTransfers?.size;
-      if (typeof pending === 'number') {
-        metricsService.setP2PPendingTransfers(pending);
-      }
+      metricsService.setP2PPendingTransfers(signalingService.getPendingTransferCount());
     } catch (err) {
       logger.debug('refreshP2PStats failed', {
         error: err instanceof Error ? err.message : String(err),

@@ -31,7 +31,8 @@ export function ReceivePage() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        // Delay revocation to allow the browser to start the download
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         setDownloading(false);
       }
     } catch (err: any) {

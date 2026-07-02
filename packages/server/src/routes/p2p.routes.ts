@@ -237,11 +237,14 @@ export async function p2pRoutes(app: FastifyInstance) {
         }
       });
 
-      // Handle connection close
-      socket.on('close', (code: number, reason: Buffer) => {
+      // Handle connection close and errors (error always fires before close in ws)
+      let cleaned = false;
+      const cleanup = (code?: number) => {
+        if (cleaned) return;
+        cleaned = true;
         roomService.leaveRoom(socketId);
         discoveryService.removePeer(socketId);
-        if (code !== 1000 && code !== 1001) {
+        if (code !== undefined && code !== 1000 && code !== 1001) {
           metricsService.recordP2PWebSocketError('close_abnormal');
         }
         metricsService.setP2PConnections(
@@ -249,6 +252,10 @@ export async function p2pRoutes(app: FastifyInstance) {
           discoveryService.getTransferringCount()
         );
         metricsService.setP2PRooms(roomService.getRoomCount());
+      };
+
+      socket.on('close', (code: number, reason: Buffer) => {
+        cleanup(code);
         logger.info('WebSocket connection closed', {
           socketId,
           code,
@@ -256,20 +263,13 @@ export async function p2pRoutes(app: FastifyInstance) {
         });
       });
 
-      // Handle errors
       socket.on('error', (error: Error) => {
         logger.error('WebSocket error', {
           socketId,
           error: error.message,
         });
         metricsService.recordP2PWebSocketError('error');
-        roomService.leaveRoom(socketId);
-        discoveryService.removePeer(socketId);
-        metricsService.setP2PConnections(
-          discoveryService.getPeerCount(),
-          discoveryService.getTransferringCount()
-        );
-        metricsService.setP2PRooms(roomService.getRoomCount());
+        cleanup();
       });
     }
   );

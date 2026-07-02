@@ -77,7 +77,7 @@ export async function transferRoutes(app: FastifyInstance) {
           config.transfer.maxExpiry
         ));
         const maxDownloadsRaw = parseInt(request.query.maxDownloads || '');
-        const maxDownloads = isNaN(maxDownloadsRaw) ? 1 : Math.min(maxDownloadsRaw, 1000);
+        const maxDownloads = isNaN(maxDownloadsRaw) ? 1 : Math.max(0, Math.min(maxDownloadsRaw, 1000));
         const ownerOnly = request.query.ownerOnly === 'true';
 
         if (ownerOnly && !userId) {
@@ -86,6 +86,8 @@ export async function transferRoutes(app: FastifyInstance) {
             error: { code: 'LOGIN_REQUIRED', message: '仅限创建者领取功能需要登录' },
           });
         }
+
+        let estimatedUncompressedSize = 0;
 
         if (isFolderUpload) {
           if (!config.security.upload.folderUpload.enabled) {
@@ -113,6 +115,8 @@ export async function transferRoutes(app: FastifyInstance) {
               error: { code: 'INVALID_ZIP', message: zipValidation.reason || 'ZIP 文件验证失败' },
             });
           }
+
+          estimatedUncompressedSize = zipValidation.estimatedUncompressedSize ?? 0;
         }
 
         if (config.security.fileValidation.enabled) {
@@ -147,7 +151,7 @@ export async function transferRoutes(app: FastifyInstance) {
         }
 
         const folderMetadata = isFolderUpload
-          ? { fileCount, folderName, estimatedUncompressedSize: 0 }
+          ? { fileCount, folderName, estimatedUncompressedSize }
           : undefined;
 
         const result = await transferService.createFileTransfer(
