@@ -137,7 +137,8 @@ export function SendPage() {
           <FolderUploader
             onZipReady={handleFolderZip}
             loading={loading}
-            maxSize={config?.maxFileSize}
+            maxUncompressedSize={config?.maxFolderUncompressedSize}
+            maxCompressedSize={config?.maxFolderCompressedSize}
           />
         )}
         {transferType === 'text' && (

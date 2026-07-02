@@ -144,10 +144,11 @@ export async function buildApp() {
     });
   }
 
-  // 文件上传
+  // 文件上传（取文件和文件夹限制中的较大值，路由层会分别做精确校验）
+  // 文件夹上传的是压缩后的 ZIP，因此 multipart 限制使用 maxCompressedSize
   await app.register(multipart, {
     limits: {
-      fileSize: config.security.upload.maxFileSize,
+      fileSize: Math.max(config.security.upload.maxFileSize, config.security.upload.folderUpload.maxCompressedSize),
       files: 1,
       fields: 5,
       fieldNameSize: 100,

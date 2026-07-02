@@ -53,6 +53,8 @@ export interface ApiError {
 
 export interface ConfigResponse {
   maxFileSize: number;
+  maxFolderUncompressedSize: number;
+  maxFolderCompressedSize: number;
   maxTextLength: number;
   defaultExpiry: number;
   maxExpiry: number;

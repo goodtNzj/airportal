@@ -76,9 +76,13 @@ export class TransferService {
     const isFolder = !!folderMetadata;
     const contentType: 'file' | 'folder' = isFolder ? 'folder' : 'file';
 
-    if (file.data.length > config.security.upload.maxFileSize) {
+    // 文件限制 50MB，文件夹限制为压缩后的 ZIP 大小（默认 300MB）
+    const sizeLimit = isFolder
+      ? config.security.upload.folderUpload.maxCompressedSize
+      : config.security.upload.maxFileSize;
+    if (file.data.length > sizeLimit) {
       metricsService.recordTransferCreated(contentType, !!userId, 'rejected');
-      throw new AppError(ErrorCodes.FILE_TOO_LARGE, `文件大小超过限制（最大 ${config.security.upload.maxFileSize / 1024 / 1024}MB）`);
+      throw new AppError(ErrorCodes.FILE_TOO_LARGE, `文件大小超过限制（最大 ${sizeLimit / 1024 / 1024}MB）`);
     }
 
     try {

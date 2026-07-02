@@ -56,6 +56,7 @@ vi.mock('../../src/services/config.service.js', () => ({
         folderUpload: {
           enabled: true,
           maxUncompressedSize: 524288000,
+          maxCompressedSize: 314572800,
           maxCompressionRatio: 100,
           maxEntries: 10000,
           maxFileNameLength: 512,

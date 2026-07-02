@@ -6,7 +6,10 @@ let loadedConfig: AppConfig | null = null;
 
 export interface FolderUploadConfig {
   enabled: boolean;
+  /** Maximum total size of all files inside the folder BEFORE compression (default 500MB) */
   maxUncompressedSize: number;
+  /** Maximum size of the compressed ZIP archive uploaded to the server (default 300MB) */
+  maxCompressedSize: number;
   maxCompressionRatio: number;
   maxEntries: number;
   maxFileNameLength: number;
@@ -318,6 +321,7 @@ export async function initConfig(): Promise<AppConfig> {
         folderUpload: {
           enabled: getValue('FOLDER_UPLOAD_ENABLED', configFile?.security?.upload?.folderUpload?.enabled, true, (v) => v !== 'false'),
           maxUncompressedSize: getValue('ZIP_MAX_UNCOMPRESSED_SIZE', configFile?.security?.upload?.folderUpload?.maxUncompressedSize, 524288000, Number),
+          maxCompressedSize: getValue('ZIP_MAX_COMPRESSED_SIZE', configFile?.security?.upload?.folderUpload?.maxCompressedSize, 314572800, Number),
           maxCompressionRatio: getValue('ZIP_MAX_COMPRESSION_RATIO', configFile?.security?.upload?.folderUpload?.maxCompressionRatio, 100, Number),
           maxEntries: getValue('ZIP_MAX_ENTRIES', configFile?.security?.upload?.folderUpload?.maxEntries, 10000, Number),
           maxFileNameLength: getValue('ZIP_MAX_FILENAME_LENGTH', configFile?.security?.upload?.folderUpload?.maxFileNameLength, 512, Number),
@@ -424,6 +428,15 @@ export function validateConfig(config: AppConfig): string[] {
     errors.push('cleanup.recordAction 必须为 update 或 delete');
   }
   if (config.security.upload.folderUpload) {
+    if (config.security.upload.folderUpload.maxUncompressedSize < 1) {
+      errors.push('security.upload.folderUpload.maxUncompressedSize 必须大于 0');
+    }
+    if (config.security.upload.folderUpload.maxCompressedSize < 1) {
+      errors.push('security.upload.folderUpload.maxCompressedSize 必须大于 0');
+    }
+    if (config.security.upload.folderUpload.maxCompressedSize > config.security.upload.folderUpload.maxUncompressedSize) {
+      errors.push('security.upload.folderUpload.maxCompressedSize 不能大于 maxUncompressedSize');
+    }
     if (config.security.upload.folderUpload.maxCompressionRatio < 1) {
       errors.push('security.upload.folderUpload.maxCompressionRatio 必须大于 0');
     }

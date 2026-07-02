@@ -32,6 +32,8 @@ export interface UserPayload {
 
 export interface Config {
   maxFileSize: number;
+  maxFolderUncompressedSize: number;
+  maxFolderCompressedSize: number;
   maxTextLength: number;
   defaultExpiry: number;
   maxExpiry: number;

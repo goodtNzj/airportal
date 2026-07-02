@@ -26,6 +26,8 @@ export async function transferRoutes(app: FastifyInstance) {
       success: true,
       data: {
         maxFileSize: config.security.upload.maxFileSize,
+        maxFolderUncompressedSize: config.security.upload.folderUpload.maxUncompressedSize,
+        maxFolderCompressedSize: config.security.upload.folderUpload.maxCompressedSize,
         maxTextLength: config.security.upload.maxTextLength,
         defaultExpiry: config.transfer.defaultExpiry,
         maxExpiry: config.transfer.maxExpiry,

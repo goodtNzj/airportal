@@ -40,6 +40,8 @@ describe('useStore', () => {
   it('should set config', () => {
     const config = {
       maxFileSize: 52428800,
+      maxFolderUncompressedSize: 524288000,
+      maxFolderCompressedSize: 314572800,
       maxTextLength: 10000,
       defaultExpiry: 180,
       maxExpiry: 3600,

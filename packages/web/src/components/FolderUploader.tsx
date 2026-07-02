@@ -4,11 +4,20 @@ import { readFolderEntries, createZipFromEntries } from '../services/folder-zip'
 interface FolderUploaderProps {
   onZipReady: (zipBlob: Blob, folderName: string, fileCount: number) => void;
   loading?: boolean;
-  maxSize?: number;
+  /** Maximum total size of all files BEFORE compression (default 500MB) */
+  maxUncompressedSize?: number;
+  /** Maximum size of the compressed ZIP archive (default 300MB) */
+  maxCompressedSize?: number;
   maxFileCount?: number;
 }
 
-export function FolderUploader({ onZipReady, loading, maxSize = 50 * 1024 * 1024, maxFileCount = 10000 }: FolderUploaderProps) {
+export function FolderUploader({
+  onZipReady,
+  loading,
+  maxUncompressedSize = 500 * 1024 * 1024,
+  maxCompressedSize = 300 * 1024 * 1024,
+  maxFileCount = 10000,
+}: FolderUploaderProps) {
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zipping, setZipping] = useState(false);
@@ -25,9 +34,10 @@ export function FolderUploader({ onZipReady, loading, maxSize = 50 * 1024 * 1024
         return;
       }
 
-      const totalSize = entries.reduce((sum, e) => sum + e.file.size, 0);
-      if (totalSize > maxSize) {
-        setError(`文件夹总大小 (${Math.round(totalSize / 1024 / 1024)}MB) 超过限制`);
+      // 校验压缩前总大小（所有文件大小之和）
+      const totalUncompressedSize = entries.reduce((sum, e) => sum + e.file.size, 0);
+      if (totalUncompressedSize > maxUncompressedSize) {
+        setError(`文件夹总大小 (${Math.round(totalUncompressedSize / 1024 / 1024)}MB) 超过限制（最大 ${Math.round(maxUncompressedSize / 1024 / 1024)}MB）`);
         return;
       }
 
@@ -37,6 +47,13 @@ export function FolderUploader({ onZipReady, loading, maxSize = 50 * 1024 * 1024
 
       try {
         const zipBlob = await createZipFromEntries(entries, folderName, setProgress);
+
+        // 校验压缩后的 ZIP 大小
+        if (zipBlob.size > maxCompressedSize) {
+          setError(`压缩后大小 (${Math.round(zipBlob.size / 1024 / 1024)}MB) 超过限制（最大 ${Math.round(maxCompressedSize / 1024 / 1024)}MB）`);
+          return;
+        }
+
         onZipReady(zipBlob, folderName, entries.length);
       } catch (err) {
         setError('压缩文件夹失败');
@@ -45,7 +62,7 @@ export function FolderUploader({ onZipReady, loading, maxSize = 50 * 1024 * 1024
         setProgress(0);
       }
     },
-    [maxSize, maxFileCount, onZipReady]
+    [maxUncompressedSize, maxCompressedSize, maxFileCount, onZipReady]
   );
 
   const handleDrop = useCallback(
@@ -132,7 +149,7 @@ export function FolderUploader({ onZipReady, loading, maxSize = 50 * 1024 * 1024
           拖拽文件夹到这里，或<span className="text-primary-500">点击选择文件夹</span>
         </p>
         <p className="text-sm text-slate-400">
-          文件夹将被压缩为 ZIP 上传（最大 {Math.round(maxSize / 1024 / 1024)}MB）
+          文件夹将被压缩为 ZIP 上传（压缩前最大 {Math.round(maxUncompressedSize / 1024 / 1024)}MB，压缩后最大 {Math.round(maxCompressedSize / 1024 / 1024)}MB）
         </p>
       </div>
 
